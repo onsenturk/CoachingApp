@@ -1,0 +1,67 @@
+# Agent governance policy (G3).
+#
+# Loaded by `packages/ai/src/govern.ts`. Every agent tool call passes through
+# `govern()` which enforces:
+#   - Tool allowlist per agent
+#   - Blocklist patterns scanned against the tool's *arguments*
+#   - Per-run call cap (rate-limit + loop protection)
+#   - Append-only AIRunLog entry for every allow/deny
+#
+# Fail-closed: if an agent isn't listed, all calls are denied.
+
+version: 1
+
+# Pattern classes scanned in BOTH user input and tool arguments.
+# Matches → DENY + log.
+blocked_patterns:
+  - id: prompt_injection
+    pattern: "(?i)(ignore|disregard)\\s+(all\\s+)?(previous|prior|above)\\s+(instructions|messages|rules)"
+  - id: system_role_spoof
+    pattern: "(?i)\\b(system|assistant)\\s*:\\s*you\\s+are"
+  - id: dump_secrets
+    pattern: "(?i)(dump|reveal|print|leak)\\s+(your|the)\\s+(system|tokens?|secrets?|credentials?|api[\\s_-]?keys?)"
+  - id: api_key_or_password
+    pattern: "(?i)(api[\\s_-]?key|password|secret|token|bearer)\\s*[:=]\\s*[A-Za-z0-9._\\-]{8,}"
+  - id: aws_access_key
+    pattern: "AKIA[0-9A-Z]{16}"
+  - id: pii_email
+    pattern: "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}"
+
+# Per-agent rules.
+agents:
+  plan-generator:
+    description: Generate a periodized training plan from baseline + goal.
+    allowed_tools:
+      - get_athlete_profile
+      - get_recent_load
+      - get_zones
+      - get_baseline
+      - check_feasibility
+    max_calls_per_run: 12
+
+  daily-adjustment:
+    description: Adjust today's planned session based on readiness.
+    allowed_tools:
+      - get_planned_session
+      - get_wellness
+      - get_load_state
+      - get_recent_compliance
+    max_calls_per_run: 8
+
+  coach-chat:
+    description: Conversational coach grounded in user data.
+    allowed_tools:
+      - search_activities
+      - get_program
+      - get_metrics
+      - compare_weeks
+      - explain_session
+    max_calls_per_run: 25
+
+  activity-summary:
+    description: Post-activity summary writer.
+    allowed_tools:
+      - get_activity
+      - get_planned_session
+      - get_zones
+    max_calls_per_run: 6

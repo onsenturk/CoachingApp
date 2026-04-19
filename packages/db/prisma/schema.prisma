@@ -1,0 +1,257 @@
+// Prisma schema for CoachingApp
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Identity ───────────────────────────────────────────────────────
+
+model User {
+  id            String   @id @default(cuid())
+  stravaId      BigInt   @unique
+  email         String?  @unique
+  firstName     String?
+  lastName      String?
+  sex           String?
+  weightKg      Float?
+  ftpWatts      Int?
+  maxHr         Int?
+  restingHr     Int?
+  measurement   String   @default("metric") // metric | imperial
+  notifyAt      String?  // HH:mm local
+  // Cached load-curve tail (latest computed by training-load worker).
+  currentCtl    Float?
+  currentAtl    Float?
+  currentTsb    Float?
+  loadComputedAt DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  stravaToken     StravaToken?
+  activities      Activity[]
+  dailyMetrics    DailyMetric[]
+  wellnessReadings WellnessReading[]
+  programs        Program[]
+  chatMessages    ChatMessage[]
+  aiRunLogs       AIRunLog[]
+}
+
+// Strava OAuth tokens — encrypted at rest (libsodium secretbox).
+model StravaToken {
+  userId          String   @id
+  accessTokenEnc  Bytes
+  refreshTokenEnc Bytes
+  expiresAt       DateTime
+  scope           String
+  athleteJson     Json?
+  lastSyncedAt    DateTime?
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── Strava activities ─────────────────────────────────────────────
+
+model Activity {
+  id              BigInt   @id // Strava activity id
+  userId          String
+  sportType       String   // Run | Ride | TrailRun | VirtualRide | ...
+  name            String
+  startDate       DateTime
+  startDateLocal  DateTime
+  timezone        String?
+  movingTime      Int      // seconds
+  elapsedTime     Int      // seconds
+  distance        Float    // meters
+  elevationGain   Float?
+  averageHr       Float?
+  maxHr           Int?
+  averageWatts    Float?
+  weightedAvgWatts Int?
+  averageSpeed    Float?   // m/s
+  averageCadence  Float?
+  kilojoules      Float?
+  trainer         Boolean  @default(false)
+  manual          Boolean  @default(false)
+  hasHeartrate    Boolean  @default(false)
+  deviceWatts     Boolean  @default(false)
+  // Derived
+  trimp           Float?
+  tss             Float?
+  intensityFactor Float?
+  rawJson         Json
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  streams        ActivityStream?
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  summary        ActivitySummary?
+
+  @@index([userId, startDate])
+  @@index([userId, sportType])
+}
+
+model ActivityStream {
+  activityId BigInt   @id
+  // Compressed JSON arrays: { time, hr, watts, distance, cadence, altitude, latlng, velocity }
+  dataJson   Json
+  fetchedAt  DateTime @default(now())
+
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+}
+
+model ActivitySummary {
+  activityId BigInt   @id
+  text       String   @db.Text
+  model      String
+  createdAt  DateTime @default(now())
+
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+}
+
+// ─── Wellness ──────────────────────────────────────────────────────
+
+// Daily user-entered check-in.
+model DailyMetric {
+  id            String   @id @default(cuid())
+  userId        String
+  date          DateTime @db.Date
+  readiness     Int      // 1-10
+  sleepHours    Float?
+  sleepQuality  Int?     // 1-5
+  restingHr     Int?
+  soreness      Int?     // 1-5
+  mood          Int?     // 1-5
+  injured       Boolean  @default(false)
+  sick          Boolean  @default(false)
+  notes         String?  @db.Text
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId, date])
+}
+
+// Adapter-agnostic wellness reading (manual / heuristic / future Oura, Whoop, etc.).
+model WellnessReading {
+  id          String   @id @default(cuid())
+  userId      String
+  date        DateTime @db.Date
+  source      String   // manual | heuristic | oura | whoop | apple-health | garmin
+  hrv         Float?   // rMSSD ms
+  sleepScore  Int?     // 0-100
+  recovery    Int?     // 0-100 (composite)
+  rawJson     Json?
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date, source])
+}
+
+// ─── Programs / planned sessions ───────────────────────────────────
+
+model Program {
+  id            String   @id @default(cuid())
+  userId        String
+  sport         String   // run | bike | both
+  goalType      String   // 5k | 10k | half | marathon | ftp | century | general
+  goalTargetSec Int?     // race time target in seconds
+  goalDate      DateTime?
+  weeksTotal    Int
+  sessionsPerWk Int
+  feasibility   String   // green | amber | red
+  feasibilityReason String? @db.Text
+  status        String   @default("active") // active | completed | paused | replaced
+  generatedBy   String   // agent name + version
+  baselineJson  Json     // captured baseline at gen time (CTL/ATL/zones/longest etc.)
+  metaJson      Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plannedSessions  PlannedSession[]
+
+  @@index([userId, status])
+}
+
+model PlannedSession {
+  id           String   @id @default(cuid())
+  programId    String
+  date         DateTime @db.Date
+  weekIndex    Int      // 1..N
+  dayOfWeek    Int      // 1..7
+  sport        String
+  workoutType  String   // easy | long | tempo | interval | threshold | recovery | rest | strength | bike-recovery
+  durationMin  Int?
+  distanceM    Float?
+  description  String   @db.Text
+  structureJson Json?   // intervals, target zones, etc.
+  isHard       Boolean  @default(false)
+  status       String   @default("planned") // planned | done | skipped | adjusted
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  program     Program            @relation(fields: [programId], references: [id], onDelete: Cascade)
+  adjustments SessionAdjustment[]
+
+  @@index([programId, date])
+  @@index([programId, weekIndex])
+}
+
+model SessionAdjustment {
+  id              String   @id @default(cuid())
+  plannedSessionId String
+  date            DateTime
+  readinessLevel  String   // green | amber | red
+  action          String   // keep | reduce_intensity | swap_z2 | rest | forced_deload | injured_pause
+  reason          String   @db.Text
+  newStructureJson Json?
+  acceptedByUser  Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  plannedSession PlannedSession @relation(fields: [plannedSessionId], references: [id], onDelete: Cascade)
+
+  @@index([plannedSessionId])
+}
+
+// ─── Chat & governance ─────────────────────────────────────────────
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  role      String   // user | assistant
+  content   String   @db.Text
+  toolsJson Json?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+// Append-only audit log for AI agent calls. NO user content.
+model AIRunLog {
+  id            String   @id @default(cuid())
+  userId        String?
+  agent         String
+  tool          String?
+  decision      String   // allow | deny | error
+  reason        String?
+  policyName    String?
+  latencyMs     Int?
+  evidenceJson  Json?
+  createdAt     DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([agent, createdAt])
+  @@index([decision, createdAt])
+}

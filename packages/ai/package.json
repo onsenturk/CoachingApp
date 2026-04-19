@@ -1,0 +1,27 @@
+{
+  "name": "@coaching/ai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./govern": "./src/govern.ts",
+    "./foundryClient": "./src/foundryClient.ts",
+    "./schemas": "./src/schemas/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@azure/identity": "4.5.0",
+    "yaml": "2.6.0",
+    "zod": "3.23.8"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "vitest": "4.1.4"
+  }
+}

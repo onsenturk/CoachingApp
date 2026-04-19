@@ -1,0 +1,54 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Stockholm
+    open-pull-requests-limit: 10
+    versioning-strategy: increase
+    groups:
+      next-and-react:
+        patterns: ["next", "react", "react-dom", "@types/react", "@types/react-dom", "eslint-config-next"]
+      auth:
+        patterns: ["next-auth", "@auth/*"]
+      types:
+        patterns: ["@types/*"]
+        update-types: ["minor", "patch"]
+      lint-format:
+        patterns: ["eslint", "eslint-*", "prettier", "@typescript-eslint/*"]
+      test:
+        patterns: ["vitest", "@vitest/*", "playwright", "@playwright/*"]
+      prisma:
+        patterns: ["prisma", "@prisma/*"]
+      bullmq:
+        patterns: ["bullmq", "ioredis"]
+      azure:
+        patterns: ["@azure/*"]
+      tailwind:
+        patterns: ["tailwindcss", "postcss", "autoprefixer"]
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Stockholm
+    open-pull-requests-limit: 5
+    groups:
+      gha-minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Stockholm
+    open-pull-requests-limit: 5
