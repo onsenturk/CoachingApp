@@ -60,19 +60,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async signIn({ user, account, profile }) {
       if (account?.provider !== "strava" || !user.id) return false;
       // Ensure a User row exists for the FK on StravaToken (no adapter).
-      await prisma.user.upsert({
-        where: { id: user.id },
+      const stravaId = BigInt((profile as { id?: number } | undefined)?.id ?? Number(user.id));
+      const nameParts = (user.name ?? "").trim().split(/\s+/);
+      const firstName = nameParts[0] || null;
+      const lastName = nameParts.slice(1).join(" ") || null;
+      // Upsert by the stable Strava id (NextAuth generates a fresh user.id
+      // each sign-in when no adapter is configured). Then align user.id with
+      // the persisted row so downstream FKs (StravaToken.userId) match.
+      const dbUser = await prisma.user.upsert({
+        where: { stravaId },
         create: {
           id: user.id,
-          name: user.name ?? null,
-          image: user.image ?? null,
-          stravaAthleteId: BigInt((profile as { id?: number } | undefined)?.id ?? Number(user.id)),
+          stravaId,
+          firstName,
+          lastName,
         },
         update: {
-          name: user.name ?? undefined,
-          image: user.image ?? undefined,
+          firstName: firstName ?? undefined,
+          lastName: lastName ?? undefined,
         },
       });
+      user.id = dbUser.id;
       // Persist (encrypted) Strava tokens for the worker to use
       if (account.access_token && account.refresh_token && account.expires_at) {
         await prisma.stravaToken.upsert({

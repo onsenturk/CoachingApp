@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>YouTube Thumbnail — AI Running Coach</title>
+<style>
+  :root {
+    --strava: #fc4c02;
+    --strava-2: #ff7a3a;
+    --bg-1: #0b1220;
+    --bg-2: #131c33;
+    --ink: #ffffff;
+    --accent: #22d3ee;     /* cyan accent */
+    --copilot: #a371f7;    /* GitHub Copilot purple */
+    --vscode: #1f6feb;     /* VS Code blue */
+    --openai: #10a37f;     /* OpenAI green */
+    --claude: #d97757;     /* Anthropic Claude warm orange */
+  }
+  html, body { margin: 0; padding: 0; background: #222; }
+  body {
+    display: grid;
+    place-items: center;
+    min-height: 100vh;
+    font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  }
+
+  /* The thumbnail itself — exact YouTube size */
+  .thumb {
+    position: relative;
+    width: 1280px;
+    height: 720px;
+    overflow: hidden;
+    background:
+      radial-gradient(1200px 700px at 75% 20%, rgba(252,76,2,0.35), transparent 60%),
+      radial-gradient(900px 600px at 15% 90%, rgba(34,211,238,0.20), transparent 60%),
+      linear-gradient(135deg, var(--bg-1), var(--bg-2));
+    color: var(--ink);
+    box-shadow: 0 30px 80px rgba(0,0,0,0.5);
+  }
+
+  /* Subtle grid pattern overlay (code/IDE feel) */
+  .thumb::before {
+    content: "";
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    mask-image: linear-gradient(180deg, rgba(0,0,0,0.6), rgba(0,0,0,0.1));
+  }
+
+  /* Top-left brand stack */
+  .brands {
+    position: absolute;
+    top: 36px;
+    left: 48px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    font-weight: 700;
+    font-size: 22px;
+    letter-spacing: 0.4px;
+    color: rgba(255,255,255,0.85);
+    z-index: 3;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    backdrop-filter: blur(6px);
+  }
+  .chip .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+  }
+  .chip.strava   .dot { background: var(--strava); box-shadow: 0 0 12px var(--strava); }
+  .chip.openai   .dot { background: var(--openai); box-shadow: 0 0 12px var(--openai); }
+  .chip.claude   .dot { background: var(--claude); box-shadow: 0 0 12px var(--claude); }
+  .chip.vscode   .dot { background: var(--vscode); box-shadow: 0 0 12px var(--vscode); }
+  .chip.copilot  .dot { background: var(--copilot); box-shadow: 0 0 12px var(--copilot); }
+
+  /* Headline */
+  .headline {
+    position: absolute;
+    left: 48px;
+    top: 110px;
+    width: 680px;
+    z-index: 4;
+  }
+  .built-with {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 18px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.85);
+    background: rgba(217,119,87,0.18);
+    border: 1px solid rgba(217,119,87,0.55);
+    padding: 6px 12px;
+    border-radius: 999px;
+    margin-bottom: 14px;
+    letter-spacing: 0.3px;
+  }
+  .built-with b { color: var(--claude); }
+  .built-with b + b { color: var(--copilot); }
+  .kicker {
+    display: inline-block;
+    background: var(--strava);
+    color: #fff;
+    font-weight: 800;
+    font-size: 22px;
+    letter-spacing: 2px;
+    padding: 8px 14px;
+    border-radius: 6px;
+    text-transform: uppercase;
+    box-shadow: 0 8px 24px rgba(252,76,2,0.45);
+  }
+  h1 {
+    margin: 18px 0 0 0;
+    font-size: 92px;
+    line-height: 0.95;
+    font-weight: 900;
+    letter-spacing: -2px;
+    text-shadow: 0 6px 30px rgba(0,0,0,0.55);
+  }
+  h1 .accent { color: var(--strava-2); }
+  h1 .underline {
+    background: linear-gradient(180deg, transparent 65%, rgba(34,211,238,0.55) 65%);
+    padding: 0 6px;
+  }
+  .sub {
+    margin-top: 22px;
+    font-size: 28px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.85);
+    max-width: 640px;
+  }
+  .sub b { color: var(--accent); }
+
+  /* Right side: face slot — full-bleed, blends into background */
+  .face-wrap {
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 620px;
+    height: 720px;
+    z-index: 2;
+    overflow: hidden;
+  }
+  .face-glow {
+    position: absolute;
+    inset: -60px -60px -60px 60px;
+    background: radial-gradient(closest-side, rgba(252,76,2,0.55), transparent 70%);
+    filter: blur(20px);
+    z-index: 1;
+    pointer-events: none;
+  }
+  .face {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 50% 35%;
+    border: none;
+    border-radius: 0;
+    /* Fade the left edge of the photo into the dark background */
+    -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 22%, #000 100%);
+            mask-image: linear-gradient(90deg, transparent 0%, #000 22%, #000 100%);
+  }
+  /* Subtle orange rim light along the photo's blended edge */
+  .face-rim {
+    position: absolute;
+    top: 0; bottom: 0;
+    left: 80px;
+    width: 4px;
+    background: linear-gradient(180deg, transparent, rgba(252,76,2,0.9), transparent);
+    filter: blur(6px);
+    z-index: 3;
+    pointer-events: none;
+  }
+  .face-placeholder { display: none; }
+
+  /* Floating tag near face */
+  .tag {
+    position: absolute;
+    z-index: 6;
+    background: #fff;
+    color: #0b1220;
+    font-weight: 900;
+    padding: 10px 16px;
+    border-radius: 10px;
+    box-shadow: 0 10px 24px rgba(0,0,0,0.4);
+    transform: rotate(-6deg);
+  }
+  .tag.ai {
+    top: 40px; right: 540px;
+    background: var(--openai);
+    color: #fff;
+    font-size: 24px;
+    padding: 12px 20px;
+    box-shadow: 0 12px 28px rgba(16,163,127,0.55);
+  }
+  .tag.code {
+    bottom: 220px; right: 540px;
+    background: var(--vscode);
+    color: #fff;
+    font-size: 20px;
+    transform: rotate(5deg);
+  }
+  .tag.copilot {
+    bottom: 110px; right: 560px;
+    background: var(--copilot);
+    color: #fff;
+    font-size: 24px;
+    padding: 12px 20px;
+    transform: rotate(-4deg);
+    box-shadow: 0 12px 28px rgba(163,113,247,0.55);
+  }
+
+  /* Bottom-left handle / footer */
+  .handle {
+    position: absolute;
+    left: 48px;
+    bottom: 36px;
+    font-size: 22px;
+    color: rgba(255,255,255,0.75);
+    z-index: 4;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+  }
+  .handle span { color: var(--strava-2); }
+
+  /* Diagonal Strava ribbon corner */
+  .corner {
+    position: absolute;
+    right: -80px; bottom: -80px;
+    width: 320px; height: 320px;
+    background: var(--strava);
+    transform: rotate(45deg);
+    opacity: 0.18;
+    z-index: 1;
+  }
+</style>
+</head>
+<body>
+
+<div class="thumb" id="thumb">
+  <div class="corner"></div>
+
+  <div class="brands">
+    <div class="chip strava"><span class="dot"></span>Strava</div>
+    <div class="chip openai"><span class="dot"></span>GPT-5</div>
+    <div class="chip vscode"><span class="dot"></span>VS Code</div>
+  </div>
+
+  <div class="headline">
+    <div class="built-with">✨ Built with <b>Claude Opus 4.7</b> + <b>GitHub Copilot</b></div>
+    <div class="kicker">Built in 1 hour</div>
+    <h1>
+      My <span class="accent">AI</span><br/>
+      <span class="underline">Running Coach</span>
+    </h1>
+    <div class="sub">
+      Powered by <b style="color:var(--openai)">GPT-5</b> on your <b>Strava</b> data.
+    </div>
+  </div>
+
+  <div class="face-wrap">
+    <div class="face-glow"></div>
+    <!-- Drop your photo here. Save as ./face.jpg next to this file. -->
+    <img class="face" src="face.jpg?v=3" alt="" onerror="this.style.background='repeating-linear-gradient(45deg,#2a3550 0 14px,#344063 14px 28px)';this.removeAttribute('src');" />
+    <div class="face-rim"></div>
+    <div class="face-placeholder" id="ph">Drop face.jpg<br/>here</div>
+  </div>
+
+  <div class="tag ai">🧠 GPT-5 Coach</div>
+  <div class="tag code">&lt;/&gt; VS Code</div>
+  <div class="tag copilot">🤖 GitHub Copilot</div>
+
+  <div class="handle">@onsenturk · <span>github.com/onsenturk/CoachingApp</span></div>
+</div>
+
+<script>
+  // Hide placeholder text once a real image loads
+  const img = document.querySelector('.face');
+  const ph = document.getElementById('ph');
+  img.addEventListener('load', () => {
+    if (img.naturalWidth > 0) ph.style.display = 'none';
+  });
+</script>
+
+</body>
+</html>

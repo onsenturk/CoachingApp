@@ -5,13 +5,18 @@
 
 .DESCRIPTION
   Reads agents/foundry-agents.json, expands ${...} env-var references, and
-  upserts each agent into the Foundry project endpoint. Uses Azure CLI for
-  auth (`az account get-access-token --resource https://ai.azure.com/`).
+  upserts each agent into the Foundry project endpoint as a "prompt" agent.
+
+  Foundry hosted/prompt-agent REST flow (api-version=v1):
+    - POST {endpoint}/agents                            → create new agent (v1)
+    - POST {endpoint}/agents/{name}/versions            → add new version
+    - DELETE {endpoint}/agents/{name}                   → delete
+
+  Auth: az account get-access-token --resource https://ai.azure.com/
 
   Per `.github/copilot-instructions.md` Azure safety policy:
     - Read-only Azure ops are allowed.
-    - This script CREATES/UPDATES Foundry agents. Do NOT run without explicit
-      user confirmation. Pass `-Confirm:$false` to skip the prompt.
+    - This script CREATES/UPDATES Foundry agents. Pass `-Confirm:$false` to skip prompt.
 
 .PARAMETER ProjectEndpoint
   Foundry project endpoint, e.g.
@@ -22,7 +27,7 @@
   Path to foundry-agents.json. Defaults to ./agents/foundry-agents.json.
 
 .PARAMETER ApiVersion
-  Foundry Agents REST API version. Defaults to 2025-11-15-preview.
+  Foundry Agents REST API version. Defaults to v1.
 
 .EXAMPLE
   pwsh ./scripts/sync-foundry-agents.ps1 -Confirm:$false
@@ -31,7 +36,7 @@
 param(
   [string]$ProjectEndpoint = $env:AZURE_FOUNDRY_PROJECT_ENDPOINT,
   [string]$ManifestPath = (Join-Path $PSScriptRoot '..' 'agents' 'foundry-agents.json'),
-  [string]$ApiVersion = '2025-11-15-preview'
+  [string]$ApiVersion = 'v1'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -74,26 +79,71 @@ $baseUrl = "$($ProjectEndpoint.TrimEnd('/'))/agents"
 
 foreach ($agent in $manifest.agents) {
   $agentName = "$($manifest.agentNamePrefix)-$($agent.useCaseId)"
-  $url = "$baseUrl/$agentName" + "?api-version=$ApiVersion"
-  $body = [ordered]@{
-    name        = $agentName
-    description = $agent.description
-    model       = $manifest.modelDeploymentName
-    instructions = $agent.baseInstruction
-    tools       = @($agent.tools)
-    temperature = $agent.temperature
-    top_p       = $agent.topP
-    metadata    = @{ useCaseId = $agent.useCaseId; sourceManifest = (Split-Path -Leaf $ManifestPath) }
-  } | ConvertTo-Json -Depth 8
 
-  if ($PSCmdlet.ShouldProcess($agentName, "PUT $url")) {
-    Write-Host "Upserting $agentName..." -ForegroundColor Yellow
-    try {
-      $resp = Invoke-RestMethod -Method Put -Uri $url -Headers $headers -Body $body
-      Write-Host "  ok ($($resp.id ?? $agentName))" -ForegroundColor Green
+  # Build the prompt-agent definition. tools/temperature/top_p go inside `definition`.
+  $definition = [ordered]@{
+    kind         = 'prompt'
+    model        = $manifest.modelDeploymentName
+    instructions = $agent.baseInstruction
+  }
+  if ($agent.tools -and $agent.tools.Count -gt 0) { $definition.tools = @($agent.tools) }
+  if ($null -ne $agent.temperature) { $definition.temperature = $agent.temperature }
+  if ($null -ne $agent.topP) { $definition.top_p = $agent.topP }
+
+  $metadata = @{ useCaseId = $agent.useCaseId; sourceManifest = (Split-Path -Leaf $ManifestPath) }
+
+  # Probe whether the agent exists.
+  $existsUrl = "$baseUrl/$agentName" + "?api-version=$ApiVersion"
+  $exists = $false
+  try {
+    Invoke-RestMethod -Method Get -Uri $existsUrl -Headers $headers | Out-Null
+    $exists = $true
+  }
+  catch {
+    if ($_.Exception.Response.StatusCode.value__ -ne 404) { throw }
+  }
+
+  if ($exists) {
+    # Update → POST a new version.
+    $url = "$baseUrl/$agentName/versions" + "?api-version=$ApiVersion"
+    $body = [ordered]@{
+      description = $agent.description
+      definition  = $definition
+      metadata    = $metadata
+    } | ConvertTo-Json -Depth 8
+
+    if ($PSCmdlet.ShouldProcess($agentName, "POST $url (new version)")) {
+      Write-Host "Updating $agentName (new version)..." -ForegroundColor Yellow
+      try {
+        $resp = Invoke-RestMethod -Method Post -Uri $url -Headers $headers -Body $body
+        $ver = if ($resp.version) { $resp.version } else { '?' }
+        Write-Host "  ok (version $ver)" -ForegroundColor Green
+      }
+      catch {
+        Write-Error "Failed to update $agentName : $($_.ErrorDetails.Message)"
+      }
     }
-    catch {
-      Write-Error "Failed to upsert $agentName : $_"
+  }
+  else {
+    # Create → POST to /agents.
+    $url = "$baseUrl" + "?api-version=$ApiVersion"
+    $body = [ordered]@{
+      name        = $agentName
+      description = $agent.description
+      definition  = $definition
+      metadata    = $metadata
+    } | ConvertTo-Json -Depth 8
+
+    if ($PSCmdlet.ShouldProcess($agentName, "POST $url (create)")) {
+      Write-Host "Creating $agentName..." -ForegroundColor Yellow
+      try {
+        $resp = Invoke-RestMethod -Method Post -Uri $url -Headers $headers -Body $body
+        $id = if ($resp.id) { $resp.id } else { $agentName }
+        Write-Host "  ok ($id)" -ForegroundColor Green
+      }
+      catch {
+        Write-Error "Failed to create $agentName : $($_.ErrorDetails.Message)"
+      }
     }
   }
 }

@@ -1,0 +1,198 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.42.1.51946",
+      "templateHash": "8678556261454553532"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Region for the Foundry account. Default Sweden Central per azure.md."
+      }
+    },
+    "foundryAccountName": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 64,
+      "metadata": {
+        "description": "Name of the AI Foundry account (Microsoft.CognitiveServices accounts resource)."
+      }
+    },
+    "foundryProjectName": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 64,
+      "metadata": {
+        "description": "Name of the Foundry project under the account."
+      }
+    },
+    "foundryProjectDisplayName": {
+      "type": "string",
+      "defaultValue": "CoachingApp",
+      "metadata": {
+        "description": "Display name for the project (shown in Foundry portal)."
+      }
+    },
+    "modelDeploymentName": {
+      "type": "string",
+      "defaultValue": "gpt-5-4",
+      "metadata": {
+        "description": "Deployment name used by application code. Must match AZURE_FOUNDRY_MODEL env var."
+      }
+    },
+    "modelName": {
+      "type": "string",
+      "defaultValue": "gpt-5.4",
+      "metadata": {
+        "description": "Underlying model name. Use the dotted form per the model catalog."
+      }
+    },
+    "modelVersion": {
+      "type": "string",
+      "defaultValue": "2026-03-05",
+      "metadata": {
+        "description": "Model version. Pinned per the model catalog."
+      }
+    },
+    "modelCapacity": {
+      "type": "int",
+      "defaultValue": 1,
+      "minValue": 1,
+      "maxValue": 2000,
+      "metadata": {
+        "description": "Capacity in TPM units (1 = 1k tokens/min for GlobalStandard). 1 is enough for dev."
+      }
+    },
+    "principalId": {
+      "type": "string",
+      "defaultValue": "[deployer().objectId]",
+      "metadata": {
+        "description": "Object id of the Entra principal that should receive the Azure AI User role. Defaults to the deployer."
+      }
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {
+        "app": "coachingapp",
+        "env": "dev"
+      },
+      "metadata": {
+        "description": "Tags applied to all resources."
+      }
+    }
+  },
+  "variables": {
+    "azureAiUserRoleId": "53ca6127-db72-4b80-b1b0-d745d6d5456d"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.CognitiveServices/accounts",
+      "apiVersion": "2025-06-01",
+      "name": "[parameters('foundryAccountName')]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('tags')]",
+      "kind": "AIServices",
+      "sku": {
+        "name": "S0"
+      },
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "allowProjectManagement": true,
+        "disableLocalAuth": true,
+        "customSubDomainName": "[parameters('foundryAccountName')]",
+        "publicNetworkAccess": "Enabled",
+        "networkAcls": {
+          "defaultAction": "Allow"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts/projects",
+      "apiVersion": "2025-06-01",
+      "name": "[format('{0}/{1}', parameters('foundryAccountName'), parameters('foundryProjectName'))]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('tags')]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "displayName": "[parameters('foundryProjectDisplayName')]",
+        "description": "CoachingApp AI Foundry project (plan-generator, daily-adjustment, coach-chat, activity-summary)."
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts/deployments",
+      "apiVersion": "2025-06-01",
+      "name": "[format('{0}/{1}', parameters('foundryAccountName'), parameters('modelDeploymentName'))]",
+      "sku": {
+        "name": "GlobalStandard",
+        "capacity": "[parameters('modelCapacity')]"
+      },
+      "properties": {
+        "model": {
+          "format": "OpenAI",
+          "name": "[parameters('modelName')]",
+          "version": "[parameters('modelVersion')]"
+        },
+        "versionUpgradeOption": "NoAutoUpgrade",
+        "raiPolicyName": "Microsoft.DefaultV2"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName'))]",
+      "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName')), parameters('principalId'), variables('azureAiUserRoleId'))]",
+      "properties": {
+        "principalId": "[parameters('principalId')]",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('azureAiUserRoleId'))]",
+        "principalType": "User"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "projectEndpoint": {
+      "type": "string",
+      "metadata": {
+        "description": "Foundry project endpoint to put in AZURE_FOUNDRY_PROJECT_ENDPOINT."
+      },
+      "value": "[format('https://{0}.services.ai.azure.com/api/projects/{1}', parameters('foundryAccountName'), parameters('foundryProjectName'))]"
+    },
+    "inferenceEndpoint": {
+      "type": "string",
+      "metadata": {
+        "description": "Inference endpoint for direct Chat Completions calls (not used by agent flows)."
+      },
+      "value": "[format('{0}models', reference(resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName')), '2025-06-01').endpoint)]"
+    },
+    "accountName": {
+      "type": "string",
+      "value": "[parameters('foundryAccountName')]"
+    },
+    "projectName": {
+      "type": "string",
+      "value": "[parameters('foundryProjectName')]"
+    },
+    "modelDeploymentNameOut": {
+      "type": "string",
+      "value": "[parameters('modelDeploymentName')]"
+    }
+  }
+}

@@ -109,13 +109,29 @@ export function validatePlan(plan: PlanCandidate): ValidationResult {
   const totals = weeklyTotals(plan);
   const sortedWeeks = [...totals.keys()].sort((a, b) => a - b);
 
-  // Volume ramp ≤ 10% vs trailing 4-week average
+  // Adaptive long-run cap: lower-frequency plans naturally concentrate volume in
+  // the long run, so a strict 35% cap forces unrealistic structures.
+  //   ≤3 sessions/wk → 50%, 4 → 42%, 5+ → 35% (configured default).
+  const longRunCap =
+    plan.sessionsPerWk <= 3
+      ? 0.5
+      : plan.sessionsPerWk === 4
+        ? 0.42
+        : RULES.LONG_RUN_MAX_WEEK_FRACTION;
+
+  // Volume ramp ≤ 10% vs trailing 4-week average. When the plan has fewer than
+  // 4 prior weeks, seed the average with `baselineWeeklyVolumeM` so the very
+  // first ramp weeks are compared against the runner's actual baseline rather
+  // than against tiny early-plan numbers.
   for (let i = 0; i < sortedWeeks.length; i++) {
     const wk = sortedWeeks[i]!;
     const cur = totals.get(wk)!.volume;
     const trailing = sortedWeeks
       .slice(Math.max(0, i - 4), i)
       .map((w) => totals.get(w)!.volume);
+    while (trailing.length < 4 && plan.baselineWeeklyVolumeM && plan.baselineWeeklyVolumeM > 0) {
+      trailing.unshift(plan.baselineWeeklyVolumeM);
+    }
     if (trailing.length === 0) continue;
     const avg = trailing.reduce((a, b) => a + b, 0) / trailing.length;
     if (avg > 0 && (cur - avg) / avg > RULES.MAX_WEEKLY_VOLUME_RAMP_PCT / 100) {
@@ -157,11 +173,11 @@ export function validatePlan(plan: PlanCandidate): ValidationResult {
   for (const [wk, w] of totals) {
     if (w.longestM > 0 && w.volume > 0) {
       const frac = w.longestM / w.volume;
-      if (frac > RULES.LONG_RUN_MAX_WEEK_FRACTION) {
+      if (frac > longRunCap) {
         violations.push({
           code: "LONG_RUN_TOO_BIG",
           weekIndex: wk,
-          message: `Week ${wk} long run ${(frac * 100).toFixed(0)}% of weekly volume (max ${RULES.LONG_RUN_MAX_WEEK_FRACTION * 100}%).`,
+          message: `Week ${wk} long run ${(frac * 100).toFixed(0)}% of weekly volume (max ${(longRunCap * 100).toFixed(0)}%).`,
         });
       }
     }

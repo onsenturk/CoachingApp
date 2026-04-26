@@ -17,3 +17,4 @@ packages/db/prisma/migrations/dev.db*
 
 # Docker
 docker-data/
+azure.md

@@ -66,6 +66,15 @@ export async function runStravaSync(job: Job<StravaSyncPayload>) {
         Date.now() - INITIAL_BACKFILL_DAYS * 24 * 60 * 60 * 1000) / 1000,
     );
 
+  // Refresh the athlete profile (FTP, weight, sex, HR zones) from Strava so
+  // training-load math has real thresholds. Best-effort: log and continue on
+  // failure — sync should not fail because zones aren't set in Strava.
+  try {
+    await refreshAthleteProfile(userId, accessToken);
+  } catch (err) {
+    console.warn(`[strava-sync] athlete profile refresh failed for ${userId}:`, err);
+  }
+
   let count = 0;
   for await (const a of stravaClient.iterateAllActivities(accessToken, since)) {
     await upsertActivity(userId, a);
@@ -125,3 +134,66 @@ async function upsertActivity(userId: string, a: SummaryActivity) {
     },
   });
 }
+
+/**
+ * Pull athlete profile + HR zones from Strava and update the User row.
+ *
+ * - `ftpWatts` ← athlete.ftp (cycling FTP set in Strava settings)
+ * - `weightKg` ← athlete.weight (kg)
+ * - `sex`     ← athlete.sex ("M" | "F")
+ * - `measurement` ← athlete.measurement_preference ("meters" → "metric")
+ * - `maxHr`   ← top of the highest HR zone (if user has zones in Strava),
+ *              otherwise fall back to MAX(maxHr) across stored activities.
+ *
+ * Only writes fields that come back non-null and only when the User row
+ * doesn't already have a (presumably user-set) value, so we never clobber
+ * something the user typed in the UI later.
+ */
+async function refreshAthleteProfile(userId: string, accessToken: string): Promise<void> {
+  const [athlete, zones] = await Promise.all([
+    stravaClient.getAthlete(accessToken),
+    stravaClient.getAthleteZones(accessToken).catch(() => null),
+  ]);
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) return;
+
+  const data: Record<string, unknown> = {};
+
+  if (user.ftpWatts == null && typeof athlete.ftp === "number" && athlete.ftp > 0) {
+    data.ftpWatts = Math.round(athlete.ftp);
+  }
+  if (user.weightKg == null && typeof athlete.weight === "number" && athlete.weight > 0) {
+    data.weightKg = athlete.weight;
+  }
+  if (!user.sex && (athlete.sex === "M" || athlete.sex === "F")) {
+    data.sex = athlete.sex;
+  }
+  if (athlete.measurement_preference) {
+    const m = athlete.measurement_preference === "feet" ? "imperial" : "metric";
+    if (user.measurement !== m) data.measurement = m;
+  }
+
+  // maxHr: prefer Strava HR zones, fall back to historical activity max.
+  if (user.maxHr == null) {
+    const hrZones = zones?.heart_rate?.zones ?? [];
+    const zoneMax = hrZones.length ? hrZones[hrZones.length - 1].max : 0;
+    if (zoneMax > 100) {
+      data.maxHr = zoneMax;
+    } else {
+      const agg = await prisma.activity.aggregate({
+        where: { userId, maxHr: { not: null } },
+        _max: { maxHr: true },
+      });
+      if (agg._max.maxHr && agg._max.maxHr > 100) {
+        data.maxHr = agg._max.maxHr;
+      }
+    }
+  }
+
+  if (Object.keys(data).length > 0) {
+    await prisma.user.update({ where: { id: userId }, data });
+    console.log(`[strava-sync] athlete profile updated for ${userId}:`, Object.keys(data));
+  }
+}
+
