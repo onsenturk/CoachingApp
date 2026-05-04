@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/Button";
 
 const PROGRESS_STEPS = [
   "Analyzing your baseline fitness…",
@@ -40,12 +41,34 @@ function parseHmsToSec(input: string): number | null {
   return sec > 0 ? sec : null;
 }
 
+// Suppress unused warning — kept for future text-paste support.
+void parseHmsToSec;
+
+/**
+ * Per-distance quick-pick finish times (seconds). Spans rec → competitive.
+ * Used to populate the chip row + bound the slider.
+ */
+const QUICK_TIMES_SEC: Record<string, number[]> = {
+  "5k": [20 * 60, 23 * 60, 25 * 60, 28 * 60, 30 * 60, 35 * 60, 40 * 60],
+  "10k": [50 * 60, 55 * 60, 60 * 60, 70 * 60, 80 * 60],
+  half: [90 * 60, 105 * 60, 120 * 60, 135 * 60, 150 * 60],
+  marathon: [3 * 3600 + 30 * 60, 4 * 3600, 4 * 3600 + 30 * 60, 5 * 3600, 5 * 3600 + 30 * 60],
+  custom: [30 * 60, 45 * 60, 60 * 60, 90 * 60, 120 * 60],
+};
+
+function fmtTimeShort(sec: number): string {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  if (h > 0) return `${h}h ${m.toString().padStart(2, "0")}m`;
+  return `${m}min`;
+}
+
 export function GoalForm() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [goalType, setGoalType] = useState<PresetId>("half");
   const [customKm, setCustomKm] = useState("10");
-  const [targetTime, setTargetTime] = useState("");
+  const [targetTimeSec, setTargetTimeSec] = useState<number | null>(null);
   const [weeksTotal, setWeeksTotal] = useState(6);
   const [sessionsPerWk, setSessionsPerWk] = useState(4);
   const [goalDate, setGoalDate] = useState(defaultGoalDateIso(6));
@@ -86,12 +109,12 @@ export function GoalForm() {
       setError("Pick a distance.");
       return;
     }
-    const targetTimeSec = parseHmsToSec(targetTime) ?? undefined;
+    const targetTimeSecPayload = targetTimeSec ?? undefined;
 
     const payload = {
       goalType,
       distanceM,
-      targetTimeSec,
+      targetTimeSec: targetTimeSecPayload,
       goalDate,
       weeksTotal,
       sessionsPerWk,
@@ -136,21 +159,26 @@ export function GoalForm() {
     <form className="relative space-y-5" onSubmit={onSubmit}>
       <fieldset>
         <legend className="mb-2 text-sm font-medium text-neutral-700">Race distance</legend>
-        <div className="flex flex-wrap gap-2">
-          {PRESETS.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => setGoalType(p.id)}
-              className={`rounded border px-3 py-1.5 text-sm ${
-                goalType === p.id
-                  ? "border-neutral-900 bg-neutral-900 text-white"
-                  : "border-neutral-300 hover:border-neutral-500"
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
+        <div role="radiogroup" aria-label="Race distance" className="flex flex-wrap gap-2">
+          {PRESETS.map((p) => {
+            const active = goalType === p.id;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => setGoalType(p.id)}
+                className={`min-h-[36px] rounded-md border px-3 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-1 ${
+                  active
+                    ? "border-neutral-900 bg-neutral-900 text-white"
+                    : "border-neutral-300 hover:border-neutral-500 hover:bg-neutral-50"
+                }`}
+              >
+                {p.label}
+              </button>
+            );
+          })}
         </div>
         {goalType === "custom" && (
           <label className="mt-2 block text-sm">
@@ -168,51 +196,73 @@ export function GoalForm() {
         )}
       </fieldset>
 
-      <label className="block text-sm">
-        <span className="text-neutral-700">Target finish time (optional)</span>
-        <input
-          type="text"
-          placeholder="hh:mm:ss e.g. 1:45:00"
-          value={targetTime}
-          onChange={(e) => setTargetTime(e.target.value)}
-          className="mt-1 w-48 rounded border border-neutral-300 p-2 font-mono"
+      <fieldset>
+        <div className="mb-2 flex items-baseline justify-between">
+          <legend className="text-sm font-medium text-neutral-700">
+            Target finish time <span className="font-normal text-neutral-400">(optional)</span>
+          </legend>
+          {targetTimeSec != null && (
+            <button
+              type="button"
+              onClick={() => setTargetTimeSec(null)}
+              className="text-xs text-neutral-500 underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-1"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+        <TargetTimePicker
+          goalType={goalType}
+          valueSec={targetTimeSec}
+          onChange={setTargetTimeSec}
         />
-        <span className="mt-1 block text-xs text-neutral-500">
+        <p className="mt-2 text-xs text-neutral-500">
           Leave blank to just complete the distance.
-        </span>
-      </label>
+        </p>
+      </fieldset>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <label className="block text-sm">
           <span className="text-neutral-700">Weeks of training</span>
           <input
             type="number"
+            inputMode="numeric"
             min={4}
             max={16}
+            step={1}
             value={weeksTotal}
             onChange={(e) => onWeeksChange(Number(e.target.value))}
-            className="mt-1 w-full rounded border border-neutral-300 p-2"
+            className="mt-1 h-10 w-full rounded-md border border-neutral-300 bg-white px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
           />
+          <span className="mt-1 block text-xs text-neutral-500">4–16 (rec. 8)</span>
         </label>
         <label className="block text-sm">
           <span className="text-neutral-700">Sessions / week</span>
           <input
             type="number"
+            inputMode="numeric"
             min={3}
             max={7}
+            step={1}
             value={sessionsPerWk}
             onChange={(e) => setSessionsPerWk(Number(e.target.value))}
-            className="mt-1 w-full rounded border border-neutral-300 p-2"
+            className="mt-1 h-10 w-full rounded-md border border-neutral-300 bg-white px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
           />
+          <span className="mt-1 block text-xs text-neutral-500">3–7 (rec. 4)</span>
         </label>
         <label className="block text-sm">
-          <span className="text-neutral-700">Race day</span>
+          <span className="text-neutral-700">
+            Race day <span className="font-normal text-neutral-400">(optional)</span>
+          </span>
           <input
             type="date"
             value={goalDate}
             onChange={(e) => setGoalDate(e.target.value)}
-            className="mt-1 w-full rounded border border-neutral-300 p-2"
+            className="mt-1 h-10 w-full rounded-md border border-neutral-300 bg-white px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
           />
+          <span className="mt-1 block text-xs text-neutral-500">
+            Auto-set from weeks; override if you have a fixed race date.
+          </span>
         </label>
       </div>
 
@@ -237,13 +287,9 @@ export function GoalForm() {
         </div>
       )}
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-      >
-        {pending ? "Generating plan…" : "Generate plan"}
-      </button>
+      <Button type="submit" variant="primary" size="md" loading={pending}>
+        {pending ? "Generating plan" : "Generate plan"}
+      </Button>
 
       {pending && (
         <div
@@ -276,5 +322,149 @@ function fmtTime(sec: number): string {
   const m = Math.floor((sec % 3600) / 60);
   const s = sec % 60;
   if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+/**
+ * Tap-friendly target-time picker.
+ * - Quick-pick chips per distance (most users tap & go).
+ * - H/M steppers for fine adjustment (no keyboard parsing).
+ * - Live "pace per km" feedback so the user understands what they're asking for.
+ */
+function TargetTimePicker({
+  goalType,
+  valueSec,
+  onChange,
+}: {
+  goalType: PresetId;
+  valueSec: number | null;
+  onChange: (sec: number) => void;
+}) {
+  const chips = QUICK_TIMES_SEC[goalType] ?? QUICK_TIMES_SEC.custom!;
+  const distanceKm =
+    goalType === "custom"
+      ? null
+      : (PRESETS.find((p) => p.id === goalType)?.distanceM ?? 0) / 1000;
+
+  const totalSec = valueSec ?? 0;
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+
+  function setHMS(newH: number, newM: number, newS: number) {
+    const hh = Math.max(0, Math.min(8, newH));
+    const mm = Math.max(0, Math.min(59, newM));
+    const ss = Math.max(0, Math.min(59, newS));
+    const sec = hh * 3600 + mm * 60 + ss;
+    if (sec > 0) onChange(sec);
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Quick-pick chips */}
+      <div role="radiogroup" aria-label="Quick finish times" className="flex flex-wrap gap-2">
+        {chips.map((sec) => {
+          const active = valueSec === sec;
+          return (
+            <button
+              key={sec}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              onClick={() => onChange(sec)}
+              className={`min-h-[36px] rounded-full border px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-1 ${
+                active
+                  ? "border-orange-600 bg-orange-600 text-white"
+                  : "border-neutral-300 bg-white text-neutral-700 hover:border-orange-400 hover:bg-orange-50"
+              }`}
+            >
+              {fmtTimeShort(sec)}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Fine-tune steppers */}
+      <div className="flex flex-wrap items-end gap-3">
+        <Stepper label="Hours" value={h} min={0} max={8} onChange={(v) => setHMS(v, m, s)} />
+        <Stepper label="Minutes" value={m} min={0} max={59} onChange={(v) => setHMS(h, v, s)} />
+        <Stepper label="Seconds" value={s} min={0} max={59} step={5} onChange={(v) => setHMS(h, m, v)} />
+        {valueSec != null && distanceKm != null && distanceKm > 0 && (
+          <div className="ml-auto rounded-md bg-neutral-100 px-3 py-2 text-xs text-neutral-600">
+            <div>
+              Pace:{" "}
+              <span className="font-mono font-semibold text-neutral-900">
+                {fmtPace(valueSec / distanceKm)}/km
+              </span>
+            </div>
+            <div className="mt-0.5 text-neutral-500">
+              Total: <span className="font-mono">{fmtTime(valueSec)}</span>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Stepper({
+  label,
+  value,
+  min,
+  max,
+  step = 1,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  onChange: (v: number) => void;
+}) {
+  const dec = () => onChange(Math.max(min, value - step));
+  const inc = () => onChange(Math.min(max, value + step));
+  return (
+    <div>
+      <div className="mb-1 text-[11px] uppercase tracking-wide text-neutral-500">{label}</div>
+      <div className="inline-flex items-stretch overflow-hidden rounded-md border border-neutral-300">
+        <button
+          type="button"
+          onClick={dec}
+          aria-label={`Decrease ${label}`}
+          className="h-10 w-10 text-lg text-neutral-700 hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-500"
+        >
+          −
+        </button>
+        <input
+          type="number"
+          inputMode="numeric"
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            if (!Number.isNaN(v)) onChange(Math.max(min, Math.min(max, v)));
+          }}
+          className="w-12 border-x border-neutral-300 text-center font-mono text-base focus:outline-none focus:ring-2 focus:ring-inset focus:ring-orange-500"
+          aria-label={label}
+        />
+        <button
+          type="button"
+          onClick={inc}
+          aria-label={`Increase ${label}`}
+          className="h-10 w-10 text-lg text-neutral-700 hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-500"
+        >
+          +
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function fmtPace(secPerKm: number): string {
+  const m = Math.floor(secPerKm / 60);
+  const s = Math.round(secPerKm % 60);
   return `${m}:${String(s).padStart(2, "0")}`;
 }

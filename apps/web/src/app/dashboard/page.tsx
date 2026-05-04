@@ -3,19 +3,58 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@coaching/db";
 import { SyncNowButton } from "./SyncNowButton";
-import { estimateCalories, formatDistance, formatDuration } from "../activities/activityFormat";
+import {
+  estimateCalories,
+  formatDistance,
+  formatDuration,
+  formatRelativeTime,
+} from "../activities/activityFormat";
+import {
+  SportBadge,
+  WeeklyVolumeChart,
+  SportMixDonut,
+  bucketByDay,
+  bucketBySport,
+} from "../activities/visuals";
+import { baseline as baselineFns, racePrediction } from "@coaching/training";
 
 export default async function DashboardPage() {
   const session = await auth();
   const userId = (session?.user as { id?: string } | undefined)?.id;
   if (!userId) redirect("/");
 
-  const [user, recentActivities, todayPlanned] = await Promise.all([
+  const since30 = new Date();
+  since30.setUTCDate(since30.getUTCDate() - 30);
+  const since90 = new Date();
+  since90.setUTCDate(since90.getUTCDate() - 90);
+
+  const RUN_SPORT_TYPES = ["Run", "TrailRun", "VirtualRun"];
+
+  const [user, recentActivities, last30, runs90, lastSynced, todayPlanned] = await Promise.all([
     prisma.user.findUnique({ where: { id: userId } }),
     prisma.activity.findMany({
       where: { userId },
       orderBy: { startDate: "desc" },
       take: 5,
+    }),
+    prisma.activity.findMany({
+      where: { userId, startDate: { gte: since30 } },
+      orderBy: { startDate: "desc" },
+      select: { sportType: true, distance: true, startDate: true },
+    }),
+    prisma.activity.findMany({
+      where: {
+        userId,
+        startDate: { gte: since90 },
+        sportType: { in: RUN_SPORT_TYPES },
+      },
+      orderBy: { startDate: "desc" },
+      select: { startDate: true, sportType: true, distance: true, movingTime: true },
+    }),
+    prisma.activity.findFirst({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true },
     }),
     prisma.plannedSession.findFirst({
       where: {
@@ -24,6 +63,24 @@ export default async function DashboardPage() {
       },
     }),
   ]);
+
+  // Race predictions (Riegel) from recent run efforts.
+  const runBaseline = baselineFns.computeRunBaseline(
+    runs90.map((a) => ({
+      startDate: a.startDate,
+      sportType: a.sportType,
+      distanceM: a.distance,
+      movingTimeSec: a.movingTime,
+    })),
+  );
+  const predictions = racePrediction.predictRaceTimes(
+    runs90.map((a) => ({
+      startDate: a.startDate,
+      distanceM: a.distance,
+      movingTimeSec: a.movingTime,
+    })),
+    { thresholdPaceSecPerKm: runBaseline.thresholdPaceSecPerKm },
+  );
 
   return (
     <main className="mx-auto max-w-3xl space-y-8 px-6 py-10">
@@ -37,6 +94,16 @@ export default async function DashboardPage() {
           <SyncNowButton />
         </nav>
       </header>
+
+      {lastSynced?.createdAt && (
+        <div className="-mt-4 flex items-center gap-2 text-xs text-neutral-500">
+          <span className="relative inline-flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+          </span>
+          Last activity synced {formatRelativeTime(lastSynced.createdAt)}
+        </div>
+      )}
 
       <section className="rounded border border-neutral-200 p-4">
         <h2 className="mb-2 text-sm font-medium text-neutral-500">Today&apos;s session</h2>
@@ -135,6 +202,62 @@ export default async function DashboardPage() {
         )}
       </section>
 
+      <section className="grid gap-4 md:grid-cols-2">
+        <div className="rounded border border-neutral-200 p-4">
+          <WeeklyVolumeChart days={bucketByDay(last30, 7)} />
+        </div>
+        <div className="rounded border border-neutral-200 p-4">
+          <h2 className="mb-2 text-xs uppercase tracking-wide text-neutral-500">Sport mix</h2>
+          <SportMixDonut slices={bucketBySport(last30)} />
+        </div>
+      </section>
+
+      {predictions.length > 0 && (
+        <section className="rounded border border-neutral-200 p-4">
+          <div className="mb-3 flex items-baseline justify-between">
+            <h2 className="text-sm font-medium text-neutral-500">Predicted race times</h2>
+            <span className="text-[10px] text-neutral-400">
+              Riegel · last 12 weeks
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {predictions.map((p) => (
+              <div
+                key={p.label}
+                className="rounded-md border border-neutral-100 bg-neutral-50 p-3"
+                title={
+                  p.source === "best-effort" && p.basisDistanceM && p.basisTimeSec
+                    ? `Scaled from ${(p.basisDistanceM / 1000).toFixed(1)}km in ${racePrediction.fmtPredictedTime(p.basisTimeSec)} on ${p.basisDate?.toISOString().slice(0, 10)}`
+                    : "Estimated from threshold pace"
+                }
+              >
+                <div className="text-[11px] uppercase tracking-wide text-neutral-500">
+                  {p.label}
+                </div>
+                <div className="mt-1 font-mono text-xl font-semibold text-neutral-900">
+                  {racePrediction.fmtPredictedTime(p.predictedSec)}
+                </div>
+                <div className="mt-0.5 text-[11px] text-neutral-500">
+                  {racePrediction.fmtPredictedPace(p.paceSecPerKm)}
+                </div>
+                <div
+                  className={`mt-1 text-[10px] ${
+                    p.source === "best-effort" ? "text-emerald-700" : "text-amber-700"
+                  }`}
+                >
+                  {p.source === "best-effort" ? "from recent run" : "estimated"}
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-[11px] text-neutral-400">
+            Predictions use Pete Riegel&apos;s formula (T₂ = T₁ × (D₂/D₁)<sup>1.06</sup>) on
+            your fastest scaled effort in the last 12 weeks. Real race times also depend on
+            course, weather, and taper.
+          </p>
+        </section>
+      )}
+
       <section className="rounded border border-neutral-200 p-4">
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-sm font-medium text-neutral-500">Recent activities</h2>
@@ -145,17 +268,27 @@ export default async function DashboardPage() {
         {recentActivities.length === 0 ? (
           <p className="text-neutral-500">No activities synced yet.</p>
         ) : (
-          <ul className="divide-y">
+          <ul className="divide-y divide-neutral-100">
             {recentActivities.map((a) => {
               const kcal = estimateCalories(a, user?.weightKg ?? 75);
               return (
-                <li key={a.id.toString()} className="py-2 text-sm">
-                  <span className="font-mono text-xs text-neutral-500">
-                    {a.startDateLocal.toISOString().slice(0, 10)}
-                  </span>{" "}
-                  · <span className="font-medium">{a.sportType}</span> ·{" "}
-                  {formatDistance(a.distance)} · {formatDuration(a.movingTime)} ·{" "}
-                  <span className="text-neutral-700">{kcal.toLocaleString()} kcal</span>
+                <li key={a.id.toString()} className="flex items-center gap-3 py-2.5">
+                  <SportBadge sportType={a.sportType} />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium text-neutral-800">{a.name}</div>
+                    <div className="text-xs text-neutral-500">
+                      {a.startDateLocal.toISOString().slice(0, 10)} ·{" "}
+                      {formatDistance(a.distance)} · {formatDuration(a.movingTime)} ·{" "}
+                      {kcal.toLocaleString()} kcal
+                      {a.averageHr ? ` · ${Math.round(a.averageHr)} bpm` : ""}
+                    </div>
+                  </div>
+                  <span
+                    className="shrink-0 text-[10px] text-neutral-400"
+                    title={a.createdAt.toISOString()}
+                  >
+                    synced {formatRelativeTime(a.createdAt)}
+                  </span>
                 </li>
               );
             })}

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { signIn } from "@/auth";
+import { Button, buttonClasses } from "@/components/Button";
 
 export default function Page() {
   return (
@@ -9,25 +10,19 @@ export default function Page() {
         AI-assisted training plans for runners and cyclists, grounded in your Strava data.
         Daily check-ins drive readiness-aware adjustments.
       </p>
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-3">
         <form
           action={async () => {
             "use server";
             await signIn("strava", { redirectTo: "/dashboard" });
           }}
         >
-          <button
-            type="submit"
-            className="rounded-md bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700"
-          >
+          <Button type="submit" variant="primary" size="md">
             Connect with Strava
-          </button>
+          </Button>
         </form>
-        <Link
-          href="/dashboard"
-          className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-100"
-        >
-          Dashboard
+        <Link href="/dashboard" className={buttonClasses({ variant: "ghost", size: "md" })}>
+          Go to dashboard →
         </Link>
       </div>
     </main>

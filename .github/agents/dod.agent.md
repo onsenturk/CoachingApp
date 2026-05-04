@@ -1,7 +1,7 @@
 ---
 name: 'dod'
 description: 'Validates completion of any task. Run this checklist before marking work as done.'
-tools: ['codebase', 'search', 'problems']
+tools: ['read', 'search']
 model: 'Claude Haiku 4'
 target: 'vscode'
 ---
@@ -27,6 +27,7 @@ A feature, fix, or change is NOT complete unless ALL of the following are satisf
 - README.md updated (if behavior changes).
 - requirements.md updated (if scope changes).
 - architecture.md updated (if structure changes), including a Mermaid diagram illustrating the current architecture.
+- `docs/architecture.drawio` (or `.drawio.svg`) updated whenever cloud infrastructure components or their relationships change. Must use the Azure stencil library (`mxgraph.azure2.*`) per `.github/instructions/draw-io.instructions.md`. Skip only if the project has no cloud infrastructure.
 - deployment.md updated (if infra changes).
 - *(Optional)* API documentation (OpenAPI/Swagger) updated — required only when the task adds or changes public API endpoints.
 - .env.example updated (if new environment variables introduced).
@@ -106,6 +107,9 @@ If no tests exist, add minimal coverage for new logic.
 - Dependency versions locked.
 - Vulnerability scan completed.
 - No abandoned/unmaintained libraries added.
+- **Runtimes and managed services use the latest stable or current LTS** per the Runtime & Service Versions table in `engineering-standards.agent.md` (e.g., PostgreSQL 18, Node.js 22 LTS / 24, .NET 10 LTS, Python 3.13).
+- Selected version was **verified against an authoritative source** this task (vendor release notes, Microsoft Learn, or endoflife.date) — not assumed from training data.
+- Any version below the baseline has a documented justification and remediation plan in `architecture.md`.
 
 ---
 

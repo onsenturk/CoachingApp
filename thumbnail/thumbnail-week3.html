@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>YouTube Thumbnail — Week 3 · Predictions & Visuals</title>
+<style>
+  :root {
+    --strava: #fc4c02;
+    --strava-2: #ff7a3a;
+    --bg-1: #0a1024;
+    --bg-2: #131c3a;
+    --ink: #ffffff;
+    --foundry: #8a5cf6;
+    --azure: #2aa9ff;
+    --accent: #22d3ee;
+    --green: #2ecc71;
+    --red: #ef4444;
+    --yellow: #facc15;
+    --copilot: #a371f7;
+  }
+  html, body { margin: 0; padding: 0; background: #222; }
+  body {
+    display: grid;
+    place-items: center;
+    min-height: 100vh;
+    font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  }
+
+  .thumb {
+    position: relative;
+    width: 1280px;
+    height: 720px;
+    overflow: hidden;
+    background:
+      radial-gradient(1100px 700px at 85% 20%, rgba(34,211,238,0.32), transparent 60%),
+      radial-gradient(900px 600px at 5% 95%, rgba(252,76,2,0.32), transparent 60%),
+      linear-gradient(135deg, var(--bg-1), var(--bg-2));
+    color: var(--ink);
+    box-shadow: 0 30px 80px rgba(0,0,0,0.5);
+  }
+  .thumb::before {
+    content: "";
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+    background-size: 40px 40px;
+    mask-image: linear-gradient(180deg, rgba(0,0,0,0.7), rgba(0,0,0,0.1));
+  }
+
+  /* Top brand chips */
+  .brands {
+    position: absolute;
+    top: 36px; left: 48px;
+    display: flex; align-items: center; gap: 14px;
+    font-weight: 700; font-size: 20px;
+    color: rgba(255,255,255,0.9);
+    z-index: 5;
+  }
+  .chip {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 14px; border-radius: 999px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.14);
+    backdrop-filter: blur(6px);
+  }
+  .chip .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .chip.cyan   .dot { background: var(--accent);  box-shadow: 0 0 12px var(--accent); }
+  .chip.azure  .dot { background: var(--azure);   box-shadow: 0 0 12px var(--azure); }
+  .chip.strava .dot { background: var(--strava);  box-shadow: 0 0 12px var(--strava); }
+
+  /* Episode badge */
+  .episode {
+    position: absolute;
+    top: 36px; right: 48px;
+    z-index: 6;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.20);
+    padding: 8px 16px;
+    border-radius: 999px;
+    font-weight: 800; font-size: 18px; letter-spacing: 2px;
+    color: #fff;
+  }
+  .episode b { color: var(--accent); }
+
+  /* Headline block */
+  .headline {
+    position: absolute;
+    left: 48px;
+    top: 110px;
+    width: 700px;
+    z-index: 4;
+  }
+  .built-with {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 18px; font-weight: 700;
+    color: rgba(255,255,255,0.9);
+    background: rgba(34,211,238,0.16);
+    border: 1px solid rgba(34,211,238,0.55);
+    padding: 6px 12px;
+    border-radius: 999px;
+    margin-bottom: 14px;
+    letter-spacing: 0.3px;
+  }
+  .built-with b.cyan { color: var(--accent); }
+  .built-with b.copilot { color: var(--copilot); }
+  .kicker {
+    display: inline-block;
+    background: var(--strava);
+    color: #fff;
+    font-weight: 800; font-size: 22px; letter-spacing: 2px;
+    padding: 8px 14px;
+    border-radius: 6px;
+    text-transform: uppercase;
+    box-shadow: 0 8px 24px rgba(252,76,2,0.45);
+  }
+  h1 {
+    margin: 18px 0 0 0;
+    font-size: 92px;
+    line-height: 0.92;
+    font-weight: 900;
+    letter-spacing: -2.5px;
+    text-shadow: 0 6px 30px rgba(0,0,0,0.55);
+  }
+  h1 .accent { color: var(--strava-2); }
+  h1 .underline {
+    background: linear-gradient(180deg, transparent 65%, rgba(34,211,238,0.65) 65%);
+    padding: 0 6px;
+  }
+  .sub {
+    margin-top: 22px;
+    font-size: 26px; font-weight: 600;
+    color: rgba(255,255,255,0.88);
+    max-width: 660px;
+    line-height: 1.25;
+  }
+  .sub b.cyan  { color: var(--accent); }
+  .sub b.green { color: var(--green); }
+
+  /* Right side: face */
+  .face-wrap {
+    position: absolute;
+    right: 0; top: 0;
+    width: 560px; height: 720px;
+    z-index: 2;
+    overflow: hidden;
+  }
+  .face-glow {
+    position: absolute;
+    inset: -60px -60px -60px 60px;
+    background: radial-gradient(closest-side, rgba(34,211,238,0.55), transparent 70%);
+    filter: blur(20px);
+    z-index: 1;
+    pointer-events: none;
+  }
+  .face {
+    position: absolute;
+    inset: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    object-position: 50% 35%;
+    -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 22%, #000 100%);
+            mask-image: linear-gradient(90deg, transparent 0%, #000 22%, #000 100%);
+  }
+  .face-rim {
+    position: absolute;
+    top: 0; bottom: 0; left: 80px;
+    width: 4px;
+    background: linear-gradient(180deg, transparent, rgba(34,211,238,0.9), transparent);
+    filter: blur(6px);
+    z-index: 3;
+  }
+
+  /* Predictions card — the money shot */
+  .pred-card {
+    position: absolute;
+    z-index: 5;
+    right: 60px;
+    bottom: 56px;
+    width: 470px;
+    background: rgba(15,22,46,0.88);
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 18px;
+    padding: 16px 18px 18px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 24px 48px rgba(0,0,0,0.55), 0 0 0 1px rgba(34,211,238,0.25);
+    transform: rotate(-2.5deg);
+  }
+  .pred-card .pc-head {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 14px; font-weight: 800; letter-spacing: 1.5px;
+    color: rgba(255,255,255,0.7); text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .pred-card .pc-title { color: var(--ink); font-size: 18px; letter-spacing: 0; }
+  .pred-card .pc-pill {
+    background: rgba(34,211,238,0.18);
+    color: var(--accent);
+    border: 1px solid rgba(34,211,238,0.55);
+    padding: 4px 10px; border-radius: 999px;
+    font-size: 11px; letter-spacing: 1.5px;
+  }
+  .pred-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .pred {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .pred .lbl {
+    font-size: 11px; font-weight: 800; letter-spacing: 1.5px;
+    color: rgba(255,255,255,0.55); text-transform: uppercase;
+  }
+  .pred .time {
+    font-family: "JetBrains Mono", "Cascadia Mono", "SF Mono", monospace;
+    font-size: 28px; font-weight: 800; line-height: 1;
+    margin-top: 4px;
+    color: #fff;
+  }
+  .pred .pace {
+    font-size: 12px; color: rgba(255,255,255,0.6);
+    margin-top: 4px; font-family: "JetBrains Mono", monospace;
+  }
+  .pred.hot .time { color: var(--strava-2); }
+  .pred.cool .time { color: var(--accent); }
+
+  /* Mini SVG visual chips floating */
+  .vis-chip {
+    position: absolute;
+    z-index: 6;
+    background: rgba(15,22,46,0.85);
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 12px;
+    padding: 10px;
+    box-shadow: 0 14px 28px rgba(0,0,0,0.45);
+  }
+  .vis-chip.bars {
+    top: 110px; right: 60px;
+    width: 200px;
+    transform: rotate(4deg);
+  }
+  .vis-chip.donut {
+    top: 290px; right: 80px;
+    width: 150px;
+    transform: rotate(-6deg);
+  }
+  .vis-chip .lbl {
+    font-size: 10px; font-weight: 800; letter-spacing: 1.5px;
+    color: rgba(255,255,255,0.6); text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  /* Floating tags */
+  .tag {
+    position: absolute;
+    z-index: 6;
+    font-weight: 900;
+    border-radius: 10px;
+    box-shadow: 0 10px 24px rgba(0,0,0,0.45);
+  }
+  .tag.cyan {
+    top: 60px; right: 280px;
+    background: var(--accent);
+    color: #052b30;
+    padding: 10px 16px;
+    font-size: 20px;
+    transform: rotate(-5deg);
+    box-shadow: 0 12px 28px rgba(34,211,238,0.55);
+  }
+  .tag.green {
+    top: 470px; right: 540px;
+    background: var(--green);
+    color: #052b14;
+    padding: 8px 12px;
+    font-size: 16px;
+    transform: rotate(6deg);
+    box-shadow: 0 12px 28px rgba(46,204,113,0.45);
+  }
+  .tag.green::before { content: "✓ "; }
+
+  /* Stat strip */
+  .stats {
+    position: absolute;
+    left: 48px; bottom: 92px;
+    z-index: 4;
+    display: flex; gap: 18px;
+  }
+  .stat {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 12px;
+    padding: 10px 16px;
+    min-width: 100px;
+  }
+  .stat .n { font-size: 30px; font-weight: 900; line-height: 1; }
+  .stat .l { font-size: 12px; font-weight: 700; letter-spacing: 1.2px; color: rgba(255,255,255,0.7); margin-top: 4px; text-transform: uppercase; }
+  .stat .n.cyan   { color: var(--accent); }
+  .stat .n.orange { color: var(--strava-2); }
+  .stat .n.green  { color: var(--green); }
+
+  /* Handle */
+  .handle {
+    position: absolute;
+    left: 48px; bottom: 36px;
+    font-size: 20px;
+    color: rgba(255,255,255,0.75);
+    z-index: 4;
+    font-weight: 700; letter-spacing: 0.3px;
+  }
+  .handle span { color: var(--strava-2); }
+
+  /* Corner accent */
+  .corner {
+    position: absolute;
+    right: -80px; bottom: -80px;
+    width: 320px; height: 320px;
+    background: var(--accent);
+    transform: rotate(45deg);
+    opacity: 0.14;
+    z-index: 1;
+  }
+</style>
+</head>
+<body>
+
+<div class="thumb" id="thumb">
+  <div class="corner"></div>
+
+  <div class="brands">
+    <div class="chip cyan"><span class="dot"></span>Riegel · VDOT</div>
+    <div class="chip azure"><span class="dot"></span>Next.js</div>
+    <div class="chip strava"><span class="dot"></span>Strava</div>
+  </div>
+
+  <div class="episode">EP <b>03</b></div>
+
+  <div class="headline">
+    <div class="built-with">✨ Shipped with <b class="copilot">Copilot</b> in one session</div>
+    <div class="kicker">Predict · Visualize · Ship</div>
+    <h1>
+      I Know Your <span class="accent">5K</span><br/>
+      Time<span class="underline"> in 12 Weeks</span>
+    </h1>
+    <div class="sub">
+      Riegel-formula <b class="cyan">race predictions</b>, sport-mix donut, weekly volume bars
+      &mdash; <b class="green">all server-rendered</b>.
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="n cyan">4</div><div class="l">Distances</div></div>
+    <div class="stat"><div class="n orange">7-day</div><div class="l">Volume bars</div></div>
+    <div class="stat"><div class="n green">0 KB</div><div class="l">Chart libs</div></div>
+  </div>
+
+  <div class="face-wrap">
+    <div class="face-glow"></div>
+    <img class="face" src="face.jpg?v=5" alt="" onerror="this.style.background='repeating-linear-gradient(45deg,#2a3550 0 14px,#344063 14px 28px)';this.removeAttribute('src');" />
+    <div class="face-rim"></div>
+  </div>
+
+  <!-- Floating mini-visuals -->
+  <div class="vis-chip bars">
+    <div class="lbl">Last 7 days</div>
+    <svg viewBox="0 0 200 60" width="100%" height="60">
+      <line x1="4" y1="55" x2="196" y2="55" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+      <rect x="6"   y="38" width="22" height="17" rx="2" fill="#7dd3fc"/>
+      <rect x="34"  y="22" width="22" height="33" rx="2" fill="#7dd3fc"/>
+      <rect x="62"  y="46" width="22" height="9"  rx="2" fill="#7dd3fc"/>
+      <rect x="90"  y="14" width="22" height="41" rx="2" fill="#7dd3fc"/>
+      <rect x="118" y="30" width="22" height="25" rx="2" fill="#7dd3fc"/>
+      <rect x="146" y="44" width="22" height="11" rx="2" fill="#7dd3fc"/>
+      <rect x="174" y="6"  width="22" height="49" rx="2" fill="#0ea5e9"/>
+    </svg>
+  </div>
+
+  <div class="vis-chip donut">
+    <div class="lbl">Sport mix</div>
+    <svg viewBox="0 0 100 100" width="100%" height="120" style="transform: rotate(-90deg)">
+      <circle cx="50" cy="50" r="38" fill="none" stroke="#2a3550" stroke-width="14"/>
+      <circle cx="50" cy="50" r="38" fill="none" stroke="#fc4c02" stroke-width="14"
+              stroke-dasharray="143 96" stroke-dashoffset="0"/>
+      <circle cx="50" cy="50" r="38" fill="none" stroke="#0284c7" stroke-width="14"
+              stroke-dasharray="60 179" stroke-dashoffset="-143"/>
+      <circle cx="50" cy="50" r="38" fill="none" stroke="#7c3aed" stroke-width="14"
+              stroke-dasharray="36 203" stroke-dashoffset="-203"/>
+    </svg>
+  </div>
+
+  <div class="pred-card">
+    <div class="pc-head">
+      <span class="pc-title">Predicted race times</span>
+      <span class="pc-pill">RIEGEL</span>
+    </div>
+    <div class="pred-grid">
+      <div class="pred cool">
+        <div class="lbl">5K</div>
+        <div class="time">22:41</div>
+        <div class="pace">4:32 /km</div>
+      </div>
+      <div class="pred">
+        <div class="lbl">10K</div>
+        <div class="time">47:18</div>
+        <div class="pace">4:43 /km</div>
+      </div>
+      <div class="pred">
+        <div class="lbl">Half</div>
+        <div class="time">1:44:55</div>
+        <div class="pace">4:58 /km</div>
+      </div>
+      <div class="pred hot">
+        <div class="lbl">Marathon</div>
+        <div class="time">3:39:22</div>
+        <div class="pace">5:12 /km</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tag cyan">📈 Race Predictions</div>
+  <div class="tag green">A11y + Focus rings</div>
+
+  <div class="handle">@onsenturk · <span>github.com/onsenturk/CoachingApp</span></div>
+</div>
+
+</body>
+</html>

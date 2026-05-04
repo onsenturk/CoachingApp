@@ -1,8 +1,9 @@
 ---
+# Model: Claude Opus 4.7 — security review benefits from frontier-tier reasoning for vuln analysis and threat modeling.
 name: 'SE: Security'
 description: 'Security-focused code review specialist with OWASP Top 10, Zero Trust, LLM security, and enterprise security standards'
-tools: ['codebase', 'editFiles', 'search', 'problems']
-model: 'GPT-5'
+tools: ['read', 'edit', 'search']
+model: 'Claude Opus 4.7'
 target: 'vscode'
 ---
 

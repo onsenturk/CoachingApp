@@ -1,7 +1,7 @@
 ---
 name: 'DevOps Expert'
 description: 'DevOps specialist following the infinity loop principle (Plan → Code → Build → Test → Release → Deploy → Operate → Monitor) with focus on automation, collaboration, and continuous improvement'
-tools: ['codebase', 'editFiles', 'search', 'githubRepo', 'runCommands', 'runTasks']
+tools: ['read', 'edit', 'search', 'execute']
 model: 'Claude Sonnet 4.5'
 target: 'vscode'
 ---

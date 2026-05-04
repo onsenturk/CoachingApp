@@ -1,7 +1,7 @@
 ---
 name: 'implementation-template'
 description: 'Template for all implementation work — new features, bug fixes, refactors, performance improvements, or breaking changes.'
-tools: ['codebase', 'search', 'editFiles', 'runCommands', 'problems']
+tools: ['read', 'search', 'edit', 'execute']
 model: 'Claude Sonnet 4.5'
 target: 'vscode'
 ---

@@ -7,6 +7,7 @@ export * as tss from "./tss.js";
 export * as ctlAtl from "./ctlAtl.js";
 export * as zones from "./zones.js";
 export * as targetPaces from "./targetPaces.js";
+export * as racePrediction from "./racePrediction.js";
 export type {
   WellnessAdapter,
   WellnessReading,

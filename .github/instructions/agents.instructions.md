@@ -61,6 +61,7 @@ Pick the cheapest model that reliably does the job. Use this tiering convention 
 
 | Tier | Model | Use for |
 |---|---|---|
+| **Frontier** | `GPT-5.5` or `Claude Opus 4.7` | Highest-stakes reasoning: deep security audits, critical architectural decisions, complex threat modeling, large-scale refactors where correctness dominates cost |
 | **Reasoning** | `GPT-5` | Security review, complex architectural decisions, financial/cost modeling, threat analysis, non-trivial refactors |
 | **Default** | `Claude Sonnet 4.5` | Most implementation, advisory, and code-generation agents — the correct choice unless there's a reason to deviate |
 | **Fast** | `GPT-5 mini` or `Claude Haiku 4` | Structured checklists, validators, formatters, deterministic transforms, lookups |
@@ -68,17 +69,18 @@ Pick the cheapest model that reliably does the job. Use this tiering convention 
 **Rules of thumb:**
 
 - Start at **Default**. Only move up to **Reasoning** if the agent has repeatedly produced weak output on the task — document why in the agent file.
+- Only move up to **Frontier** (`GPT-5.5` / `Claude Opus 4.7`) when **Reasoning** has demonstrably fallen short and the cost of a wrong answer outweighs the premium-request cost. Document the justification in the agent file.
 - Move down to **Fast** when the agent's job is rule-based or checklist-driven rather than judgment-driven.
 - Model availability in VS Code Copilot depends on the user's plan. Frontmatter is a *preference*, not a guarantee — VS Code falls back to the default model if the requested one is unavailable.
-- Premium-tier models (`GPT-5`, `Claude Sonnet 4.5`) consume more Copilot premium requests. Reserve them for agents that genuinely need deep reasoning.
+- Premium-tier models (`GPT-5`, `GPT-5.5`, `Claude Sonnet 4.5`, `Claude Opus 4.7`) consume more Copilot premium requests — Frontier tier is the most expensive. Reserve them for agents that genuinely need deep reasoning.
 
 When deviating from Default, add a one-line comment above the frontmatter explaining the choice, e.g.:
 
 ```yaml
 ---
-# Model: GPT-5 — security review requires strongest available reasoning for vuln analysis.
+# Model: Claude Opus 4.7 — security review requires frontier-tier reasoning for vuln analysis.
 name: 'SE: Security'
-model: 'GPT-5'
+model: 'Claude Opus 4.7'
 # ...
 ---
 ```

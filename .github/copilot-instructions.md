@@ -55,6 +55,8 @@ For questions about how a service/protocol/API works, or when generating technic
 
 5. **Prefer research over confidence.** When the user asks a factual question, default to checking the authoritative source instead of answering from memory — especially for Azure services, networking, pricing, and anything version-dependent.
 
+6. **Use latest stable / current LTS for runtimes and services.** When generating IaC, Dockerfiles, package manifests, or recommending a runtime, default to the latest stable or current LTS version (e.g., PostgreSQL 18, Node.js 22 LTS or 24, .NET 10 LTS, Python 3.13). Verify the current version against an authoritative source (vendor release notes, Microsoft Learn, [endoflife.date](https://endoflife.date)) before pinning. Never propose an EOL or near-EOL version for new work. The full policy and version baseline lives in [.github/agents/engineering-standards.agent.md](.github/agents/engineering-standards.agent.md) under **Runtime & Service Versions**.
+
 ---
 
 ## When to Use Agents
@@ -71,6 +73,7 @@ For questions about how a service/protocol/API works, or when generating technic
 | `@adr-generator` | Creating Architectural Decision Records (ADRs) with structured formatting |
 | `@devops-expert` | DevOps practices following the infinity loop (Plan → Code → Build → Test → Release → Deploy → Operate → Monitor) |
 | `@repo-architect` | Bootstrapping or validating agentic project structures, folder hierarchies, and Copilot customization files |
+| `@search-ai-optimization-expert` | Generating SEO/AEO/GEO content, meta tags, JSON-LD, sitemap/robots, and AI-discoverable landing pages |
 
 ---
 
@@ -84,6 +87,8 @@ Skills are loaded automatically from `.github/skills/`. Use the matching skill w
 | `git-commit` | Committing changes — uses conventional commits, intelligent staging, auto-generated messages |
 | `github-issues` | Creating, updating, or managing GitHub issues (bug reports, features, labels, milestones) |
 | `architecture-blueprint-generator` | Generating architecture documentation, detecting patterns, creating visual diagrams |
+| `draw-io-diagram-generator` | Generating or editing `.drawio` / `.drawio.svg` diagrams (architecture, flowchart, sequence, ER, UML, network) with valid mxGraph XML |
+| `web-design-reviewer` | Visual QA of local or deployed sites — screenshots across viewports, detects layout/responsive/accessibility/visual-consistency issues and fixes at source |
 | `codeql` | Setting up CodeQL code scanning, GitHub Actions workflows for SAST, or CodeQL CLI |
 | `dependabot` | Configuring `dependabot.yml`, dependency update strategies, grouped updates, or security updates |
 | `secret-scanning` | Enabling secret scanning, push protection, custom patterns, or remediating secret alerts |
@@ -119,19 +124,20 @@ If any section is missing, the task is incomplete.
 This repository uses Azure as its cloud platform. The following rules are **non-negotiable**:
 
 1. **Read `azure.md` first.** Before any Azure-related work, read `azure.md` in the repository root for tenant, subscription, and resource group context.
-2. **Never create, update, or delete Azure resources autonomously.** Do not run `az resource create`, `azd up`, `azd deploy`, `terraform apply`, `az group create`, `az webapp create`, or any command that mutates Azure state without explicit user approval.
-3. **Allowed Azure operations (without asking):**
+2. **If `azure.md` does not exist, create it from the template** before proceeding with any Azure work. Use the structure from this toolkit's [azure.md](../azure.md) (Tenant / Subscription / Resource Group sections with `<placeholder>` values) and ask the user to fill in the Tenant ID. Do not invent values.
+3. **Never create, update, or delete Azure resources autonomously.** Do not run `az resource create`, `azd up`, `azd deploy`, `terraform apply`, `az group create`, `az webapp create`, or any command that mutates Azure state without explicit user approval.
+4. **Allowed Azure operations (without asking):**
    - Read-only queries: `az resource list`, `az graph query`, Azure Resource Graph, Azure MCP read operations
    - Documentation lookups: Microsoft Learn MCP, Azure best practices
    - IaC authoring: generating Bicep/Terraform files locally (not deploying them)
    - Architecture planning and cost estimation
-4. **Operations that require explicit user confirmation:**
+5. **Operations that require explicit user confirmation:**
    - Any deployment (`azd up`, `azd deploy`, `terraform apply`, `az deployment`)
    - Resource creation, modification, or deletion
    - Role assignments and RBAC changes
    - DNS, networking, or firewall changes
    - Any destructive operation
-5. If `azure.md` has no Tenant ID configured, refuse Azure operations that require tenant context and ask the user to configure it.
+6. If `azure.md` has no Tenant ID configured, refuse Azure operations that require tenant context and ask the user to configure it.
 
 ---
 

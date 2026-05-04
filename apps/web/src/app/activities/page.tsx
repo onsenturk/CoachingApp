@@ -2,7 +2,8 @@ import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@coaching/db";
-import { estimateCalories, formatDistance, formatDuration } from "./activityFormat";
+import { estimateCalories, formatDistance, formatDuration, formatRelativeTime } from "./activityFormat";
+import { SportBadge } from "./visuals";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +60,7 @@ export default async function ActivitiesPage({
                 <th className="px-3 py-2 text-right">Time</th>
                 <th className="px-3 py-2 text-right">Avg HR</th>
                 <th className="px-3 py-2 text-right">Calories</th>
+                <th className="px-3 py-2 text-right">Synced</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100">
@@ -67,7 +69,7 @@ export default async function ActivitiesPage({
                   <td className="px-3 py-2 font-mono text-xs text-neutral-500">
                     {a.startDateLocal.toISOString().slice(0, 10)}
                   </td>
-                  <td className="px-3 py-2">{a.sportType}</td>
+                  <td className="px-3 py-2"><SportBadge sportType={a.sportType} /></td>
                   <td className="max-w-xs truncate px-3 py-2 text-neutral-700">{a.name}</td>
                   <td className="px-3 py-2 text-right">{formatDistance(a.distance)}</td>
                   <td className="px-3 py-2 text-right">{formatDuration(a.movingTime)}</td>
@@ -76,6 +78,12 @@ export default async function ActivitiesPage({
                   </td>
                   <td className="px-3 py-2 text-right">
                     {estimateCalories(a, weightKg).toLocaleString()} kcal
+                  </td>
+                  <td
+                    className="px-3 py-2 text-right text-xs text-neutral-400"
+                    title={a.createdAt.toISOString()}
+                  >
+                    {formatRelativeTime(a.createdAt)}
                   </td>
                 </tr>
               ))}

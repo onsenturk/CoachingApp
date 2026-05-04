@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/Button";
 
 /**
  * Tap-first daily check-in.
@@ -112,13 +113,14 @@ export function CheckInForm() {
         <Toggle active={sick} onClick={() => setSick((v) => !v)} label="🤒 Sick" />
       </div>
 
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
         onClick={() => setShowMore((v) => !v)}
-        className="text-sm text-neutral-500 underline"
+        aria-expanded={showMore}
       >
         {showMore ? "Hide details" : "More details (optional)"}
-      </button>
+      </Button>
 
       {showMore && (
         <div className="space-y-4 rounded border border-neutral-200 p-4">
@@ -148,15 +150,19 @@ export function CheckInForm() {
         </div>
       )}
 
-      <button
+      <Button
         type="submit"
-        disabled={submitting}
-        className="w-full rounded bg-neutral-900 px-4 py-3 text-base font-medium text-white disabled:opacity-50"
+        variant="primary"
+        size="lg"
+        fullWidth
+        loading={submitting}
       >
-        {submitting ? "Submitting…" : "Submit check-in"}
-      </button>
-      {result && <p className="rounded bg-green-50 p-3 text-sm text-green-800">{result}</p>}
-      {error && <p className="rounded bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+        {submitting ? "Submitting" : "Submit check-in"}
+      </Button>
+      <div role="status" aria-live="polite">
+        {result && <p className="rounded bg-green-50 p-3 text-sm text-green-800">{result}</p>}
+        {error && <p className="rounded bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+      </div>
     </form>
   );
 }
@@ -183,21 +189,26 @@ function Section({
 
 function Scale10({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   return (
-    <div className="grid grid-cols-10 gap-1">
-      {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
-        <button
-          key={n}
-          type="button"
-          onClick={() => onChange(n)}
-          className={`rounded py-2 text-sm ${
-            n === value
-              ? "bg-neutral-900 text-white"
-              : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
-          }`}
-        >
-          {n}
-        </button>
-      ))}
+    <div role="radiogroup" aria-label="Readiness 1 to 10" className="grid grid-cols-10 gap-1">
+      {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => {
+        const active = n === value;
+        return (
+          <button
+            key={n}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(n)}
+            className={`min-h-[40px] rounded text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-1 ${
+              active
+                ? "bg-neutral-900 text-white"
+                : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
+            }`}
+          >
+            {n}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -214,7 +225,7 @@ function Emoji5({
   captions: string[];
 }) {
   return (
-    <div className="grid grid-cols-5 gap-2">
+    <div role="radiogroup" className="grid grid-cols-5 gap-2">
       {options.map((emoji, idx) => {
         const n = idx + 1;
         const active = n === value;
@@ -222,13 +233,15 @@ function Emoji5({
           <button
             key={n}
             type="button"
+            role="radio"
+            aria-checked={active}
             onClick={() => onChange(n)}
             aria-label={captions[idx]}
-            className={`flex flex-col items-center rounded py-2 text-2xl ${
+            className={`flex min-h-[56px] flex-col items-center justify-center rounded py-2 text-2xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-1 ${
               active ? "bg-neutral-900 text-white" : "bg-neutral-100 hover:bg-neutral-200"
             }`}
           >
-            <span>{emoji}</span>
+            <span aria-hidden>{emoji}</span>
             <span
               className={`mt-1 text-[10px] ${active ? "text-neutral-200" : "text-neutral-500"}`}
             >
@@ -254,7 +267,8 @@ function Toggle({
     <button
       type="button"
       onClick={onClick}
-      className={`flex-1 rounded border px-3 py-2 text-sm ${
+      aria-pressed={active}
+      className={`min-h-[40px] flex-1 rounded border px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-1 ${
         active
           ? "border-neutral-900 bg-neutral-900 text-white"
           : "border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"

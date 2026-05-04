@@ -1,7 +1,7 @@
 ---
 name: 'engineering-standards'
 description: 'Reviews architecture, security, infrastructure, and coding compliance. Use to validate designs or check standards.'
-tools: ['codebase', 'search', 'problems', 'editFiles']
+tools: ['read', 'search', 'edit']
 model: 'Claude Sonnet 4.5'
 target: 'vscode'
 ---
@@ -36,6 +36,28 @@ Default service choices:
 - Database: PostgreSQL Flexible Server or CosmosDB
 - Storage: Azure Storage (Blob)
 - Secrets: Azure Key Vault
+
+### Runtime & Service Versions
+
+- **Always use the latest stable release or current LTS** for runtimes, databases, and managed services. Never pin to an end-of-life or near-EOL version for new work.
+- **Verify before pinning.** Before selecting a version, confirm it is current via the official source (vendor release notes, Microsoft Learn, [endoflife.date](https://endoflife.date)). Flag the check as **Verified** in the implementation plan.
+- When the latest stable and LTS differ, prefer **LTS for production** workloads and **latest stable for greenfield/short-lived** projects unless the user specifies otherwise.
+- Document the chosen version (and why) in `architecture.md` or `deployment.md`.
+- Upgrade existing projects when their pinned version reaches < 12 months of support remaining.
+
+Reference baseline (re-verify per task — these are the minimum acceptable as of the standard's last review):
+
+| Runtime / Service             | Minimum acceptable        | Notes                                                |
+| ----------------------------- | ------------------------- | ---------------------------------------------------- |
+| PostgreSQL (Flexible Server)  | **18**                    | Use latest stable; do not deploy 16 or earlier new.  |
+| Node.js                       | **22 LTS** (or 24 Current)| 22 = Active LTS; 24 acceptable for non-LTS workloads.|
+| .NET                          | **10 (LTS)**              | .NET 8 LTS acceptable only for existing projects.    |
+| Python                        | **3.13** (or newer stable)| Avoid 3.11 and earlier for new work.                 |
+| React                         | **19**                    | Latest stable major.                                 |
+| Azure Functions runtime       | **v4** (isolated worker)  | In-process model is deprecated.                      |
+| Container base images         | Latest LTS distro tag     | e.g., `mcr.microsoft.com/dotnet/aspnet:10.0`, `node:22-alpine`. Pin by digest in production. |
+
+If a project must use a version below the baseline, document the constraint and remediation plan in `architecture.md`.
 
 ### Infrastructure as Code (IaC)
 
@@ -190,6 +212,7 @@ Every project must contain:
 - README.md
 - requirements.md
 - architecture.md (must include a Mermaid diagram illustrating the current architecture)
+- `docs/architecture.drawio` (or `docs/architecture.drawio.svg`) — **required when the project deploys cloud infrastructure**. Use the Azure stencil library (`mxgraph.azure2.*`) per `.github/instructions/draw-io.instructions.md`. Update whenever infra components or their relationships change. Reference/embed it from `architecture.md`.
 - deployment.md
 - .env.example
 - Infrastructure-as-Code (Bicep/Terraform)
