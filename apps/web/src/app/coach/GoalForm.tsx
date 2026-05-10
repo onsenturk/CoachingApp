@@ -63,7 +63,11 @@ function fmtTimeShort(sec: number): string {
   return `${m}min`;
 }
 
-export function GoalForm() {
+export function GoalForm({
+  requiresReplacementApproval = false,
+}: {
+  requiresReplacementApproval?: boolean;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [goalType, setGoalType] = useState<PresetId>("half");
@@ -79,6 +83,7 @@ export function GoalForm() {
     altWeeks?: number;
   } | null>(null);
   const [progressIdx, setProgressIdx] = useState(0);
+  const [replaceConfirmed, setReplaceConfirmed] = useState(false);
 
   useEffect(() => {
     if (!pending) {
@@ -101,6 +106,11 @@ export function GoalForm() {
     setError(null);
     setFeasibilityHint(null);
 
+    if (requiresReplacementApproval && !replaceConfirmed) {
+      setError("Confirm that this new plan should replace your current active plan.");
+      return;
+    }
+
     const distanceM =
       goalType === "custom"
         ? Number(customKm) * 1000
@@ -119,6 +129,7 @@ export function GoalForm() {
       weeksTotal,
       sessionsPerWk,
       sport: "run" as const,
+      replaceActiveProgram: requiresReplacementApproval ? replaceConfirmed : false,
     };
 
     startTransition(async () => {
@@ -128,11 +139,18 @@ export function GoalForm() {
         body: JSON.stringify(payload),
       });
       if (res.ok) {
-        router.push("/calendar");
+        const json = (await res.json().catch(() => null)) as null | {
+          warnings?: Array<{ message?: string }>;
+        };
+        router.push(json?.warnings?.length ? "/calendar?warning=safety-retry" : "/calendar");
         router.refresh();
         return;
       }
       const json = await res.json().catch(() => null);
+      if (res.status === 409 && json?.requiresReplacementApproval) {
+        setError("Confirm replacement before generating a new active plan.");
+        return;
+      }
       if (res.status === 422 && json?.feasibility === "red") {
         setFeasibilityHint({
           reason: json.reason ?? "Goal looks too aggressive for current fitness.",
@@ -287,8 +305,33 @@ export function GoalForm() {
         </div>
       )}
 
-      <Button type="submit" variant="primary" size="md" loading={pending}>
-        {pending ? "Generating plan" : "Generate plan"}
+      {requiresReplacementApproval && (
+        <label className="flex gap-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+          <input
+            type="checkbox"
+            checked={replaceConfirmed}
+            onChange={(event) => setReplaceConfirmed(event.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-amber-400 text-orange-600 focus:ring-orange-500"
+          />
+          <span>
+            Replace my current active plan with this new generated plan. The previous plan will be
+            archived and will no longer drive my calendar.
+          </span>
+        </label>
+      )}
+
+      <Button
+        type="submit"
+        variant="primary"
+        size="md"
+        loading={pending}
+        disabled={requiresReplacementApproval && !replaceConfirmed}
+      >
+        {pending
+          ? "Generating plan"
+          : requiresReplacementApproval
+            ? "Generate replacement plan"
+            : "Generate plan"}
       </Button>
 
       {pending && (
@@ -396,6 +439,10 @@ function TargetTimePicker({
               <span className="font-mono font-semibold text-neutral-900">
                 {fmtPace(valueSec / distanceKm)}/km
               </span>
+              <span className="text-neutral-400"> · </span>
+              <span className="font-mono font-semibold text-neutral-900">
+                {fmtKmhFromPace(valueSec / distanceKm)} km/h
+              </span>
             </div>
             <div className="mt-0.5 text-neutral-500">
               Total: <span className="font-mono">{fmtTime(valueSec)}</span>
@@ -467,4 +514,9 @@ function fmtPace(secPerKm: number): string {
   const m = Math.floor(secPerKm / 60);
   const s = Math.round(secPerKm % 60);
   return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function fmtKmhFromPace(secPerKm: number): string {
+  if (!Number.isFinite(secPerKm) || secPerKm <= 0) return "-";
+  return (3600 / secPerKm).toFixed(1);
 }

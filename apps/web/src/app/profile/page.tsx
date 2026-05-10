@@ -2,6 +2,7 @@ import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@coaching/db";
+import { AppNavTabs } from "@/components/AppNavTabs";
 
 export default async function ProfilePage() {
   const session = await auth();
@@ -33,18 +34,24 @@ export default async function ProfilePage() {
     created_at?: string;
   };
 
-  const fullName = [user.firstName, user.lastName].filter(Boolean).join(" ") || "—";
-  const lastSync = token?.lastSyncedAt ? new Date(token.lastSyncedAt).toLocaleString() : "Never";
-  const memberSince = athlete?.created_at ? new Date(athlete.created_at).toLocaleDateString() : "—";
-  const location = [athlete?.city, athlete?.state, athlete?.country].filter(Boolean).join(", ") || "—";
+  const fullName =
+    [user.firstName, user.lastName].filter(Boolean).join(" ") || "—";
+  const lastSync = token?.lastSyncedAt
+    ? new Date(token.lastSyncedAt).toLocaleString()
+    : "Never";
+  const memberSince = athlete?.created_at
+    ? new Date(athlete.created_at).toLocaleDateString()
+    : "—";
+  const location =
+    [athlete?.city, athlete?.state, athlete?.country]
+      .filter(Boolean)
+      .join(", ") || "—";
 
   return (
     <main className="mx-auto max-w-3xl space-y-8 px-6 py-10">
-      <header className="flex items-center justify-between">
+      <header className="space-y-4">
         <h1 className="text-2xl font-semibold">Athlete Profile</h1>
-        <nav className="flex items-center gap-3 text-sm">
-          <Link href="/dashboard" className="underline">Dashboard</Link>
-        </nav>
+        <AppNavTabs />
       </header>
 
       <section className="flex items-center gap-4 rounded border border-neutral-200 p-4">
@@ -62,7 +69,9 @@ export default async function ProfilePage() {
         )}
         <div>
           <div className="text-lg font-medium">{fullName}</div>
-          <div className="text-sm text-neutral-500">{user.email ?? "No email on file"}</div>
+          <div className="text-sm text-neutral-500">
+            {user.email ?? "No email on file"}
+          </div>
           <div className="text-xs text-neutral-400">
             Strava ID {String(user.stravaId)} · {location}
           </div>
@@ -70,10 +79,15 @@ export default async function ProfilePage() {
       </section>
 
       <section className="rounded border border-neutral-200 p-4">
-        <h2 className="mb-3 text-sm font-medium text-neutral-500">Physiological thresholds</h2>
+        <h2 className="mb-3 text-sm font-medium text-neutral-500">
+          Physiological thresholds
+        </h2>
         <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3">
           <Field label="Sex" value={user.sex ?? "—"} />
-          <Field label="Weight" value={user.weightKg ? `${user.weightKg.toFixed(1)} kg` : "—"} />
+          <Field
+            label="Weight"
+            value={user.weightKg ? `${user.weightKg.toFixed(1)} kg` : "—"}
+          />
           <Field label="Units" value={user.measurement} />
           <Field
             label="FTP"
@@ -92,25 +106,36 @@ export default async function ProfilePage() {
           />
         </dl>
         <p className="mt-4 text-xs text-neutral-500">
-          FTP, weight, sex, and max HR are auto-populated from Strava on every sync. Resting HR is
-          private to Strava — set yours in the <Link href="/checkin" className="underline">daily check-in</Link>.
+          FTP, weight, sex, and max HR are auto-populated from Strava on every
+          sync. Resting HR is private to Strava — set yours in the{" "}
+          <Link href="/checkin" className="underline">
+            daily check-in
+          </Link>
+          .
         </p>
       </section>
 
       <section className="rounded border border-neutral-200 p-4">
-        <h2 className="mb-3 text-sm font-medium text-neutral-500">Current training load</h2>
+        <h2 className="mb-3 text-sm font-medium text-neutral-500">
+          Current training load
+        </h2>
         <dl className="grid grid-cols-3 gap-4 text-sm">
           <Field label="Fitness (CTL)" value={fmtNum(user.currentCtl)} />
           <Field label="Fatigue (ATL)" value={fmtNum(user.currentAtl)} />
           <Field label="Form (TSB)" value={fmtNum(user.currentTsb)} />
         </dl>
         <p className="mt-3 text-xs text-neutral-500">
-          Last computed: {user.loadComputedAt ? new Date(user.loadComputedAt).toLocaleString() : "Never"}
+          Last computed:{" "}
+          {user.loadComputedAt
+            ? new Date(user.loadComputedAt).toLocaleString()
+            : "Never"}
         </p>
       </section>
 
       <section className="rounded border border-neutral-200 p-4">
-        <h2 className="mb-3 text-sm font-medium text-neutral-500">Strava connection</h2>
+        <h2 className="mb-3 text-sm font-medium text-neutral-500">
+          Strava connection
+        </h2>
         <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
           <Field label="Last sync" value={lastSync} />
           <Field label="Activities synced" value={String(activityCount)} />
@@ -118,7 +143,11 @@ export default async function ProfilePage() {
           <Field label="OAuth scope" value={token?.scope ?? "—"} />
           <Field
             label="Latest check-in"
-            value={latestMetric?.date ? new Date(latestMetric.date).toLocaleDateString() : "Never"}
+            value={
+              latestMetric?.date
+                ? new Date(latestMetric.date).toLocaleDateString()
+                : "Never"
+            }
           />
         </dl>
       </section>
@@ -126,10 +155,20 @@ export default async function ProfilePage() {
   );
 }
 
-function Field({ label, value, hint }: { label: string; value: string; hint?: string }) {
+function Field({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+}) {
   return (
     <div>
-      <dt className="text-xs uppercase tracking-wide text-neutral-500">{label}</dt>
+      <dt className="text-xs uppercase tracking-wide text-neutral-500">
+        {label}
+      </dt>
       <dd className="text-base font-medium">{value}</dd>
       {hint ? <div className="text-xs text-neutral-400">{hint}</div> : null}
     </div>

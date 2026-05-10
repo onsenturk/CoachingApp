@@ -177,7 +177,7 @@ async function refreshAthleteProfile(userId: string, accessToken: string): Promi
   // maxHr: prefer Strava HR zones, fall back to historical activity max.
   if (user.maxHr == null) {
     const hrZones = zones?.heart_rate?.zones ?? [];
-    const zoneMax = hrZones.length ? hrZones[hrZones.length - 1].max : 0;
+    const zoneMax = hrZones.length ? hrZones[hrZones.length - 1]?.max ?? 0 : 0;
     if (zoneMax > 100) {
       data.maxHr = zoneMax;
     } else {

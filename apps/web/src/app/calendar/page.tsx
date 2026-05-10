@@ -2,6 +2,9 @@ import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@coaching/db";
+import { sportLabel } from "../activities/activityFormat";
+import { AppNavTabs } from "@/components/AppNavTabs";
+import { PlannedSessionCard } from "@/components/PlannedSessionCard";
 
 const DAYS_AHEAD = 14;
 const DAYS_BACK = 7;
@@ -14,7 +17,8 @@ function fmtHms(sec: number): string {
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
   const s = sec % 60;
-  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  if (h > 0)
+    return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
@@ -24,17 +28,19 @@ const FEASIBILITY_CHIP: Record<string, string> = {
   red: "bg-rose-100 text-rose-800",
 };
 
-const STATUS_CHIP: Record<string, string> = {
-  planned: "bg-neutral-100 text-neutral-700",
-  done: "bg-emerald-100 text-emerald-800",
-  skipped: "bg-neutral-200 text-neutral-600 line-through",
-  adjusted: "bg-amber-100 text-amber-800",
-};
+type CalendarSearchParams = Promise<{ view?: string; warning?: string }>;
 
-export default async function CalendarPage() {
+export default async function CalendarPage({
+  searchParams,
+}: {
+  searchParams: CalendarSearchParams;
+}) {
   const session = await auth();
   const userId = (session?.user as { id?: string } | undefined)?.id;
   if (!userId) redirect("/");
+
+  const { view, warning } = await searchParams;
+  const showFullPlan = view === "plan";
 
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
@@ -43,38 +49,56 @@ export default async function CalendarPage() {
   const end = new Date(today);
   end.setUTCDate(end.getUTCDate() + DAYS_AHEAD);
 
-  const [activeProgram, planned, activities] = await Promise.all([
-    prisma.program.findFirst({
-      where: { userId, status: "active" },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.plannedSession.findMany({
-      where: {
-        program: { userId },
-        date: { gte: start, lte: end },
-      },
-      orderBy: { date: "asc" },
-    }),
-    prisma.activity.findMany({
-      where: {
-        userId,
-        startDateLocal: { gte: start, lte: end },
-      },
-      orderBy: { startDateLocal: "asc" },
-    }),
-  ]);
+  const activeProgram = await prisma.program.findFirst({
+    where: { userId, status: "active" },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const planned = activeProgram
+    ? await prisma.plannedSession.findMany({
+        where: showFullPlan
+          ? { programId: activeProgram.id }
+          : {
+              programId: activeProgram.id,
+              date: { gte: start, lte: end },
+            },
+        orderBy: { date: "asc" },
+      })
+    : [];
+  const activities = await prisma.activity.findMany({
+    where: {
+      userId,
+      startDateLocal: { gte: start, lte: end },
+    },
+    orderBy: { startDateLocal: "asc" },
+  });
+  const showSafetyRetryWarning =
+    warning === "safety-retry" || hasSafetyRetryWarning(activeProgram?.metaJson);
 
   const byDay = new Map<
     string,
     { planned: typeof planned; activities: typeof activities }
   >();
-  for (let i = -DAYS_BACK; i <= DAYS_AHEAD; i++) {
-    const d = new Date(today);
-    d.setUTCDate(d.getUTCDate() + i);
-    byDay.set(dayKey(d), { planned: [], activities: [] });
+  if (showFullPlan && planned.length > 0) {
+    const first = new Date(planned[0]!.date);
+    const last = new Date(planned[planned.length - 1]!.date);
+    for (
+      const d = new Date(first);
+      d <= last;
+      d.setUTCDate(d.getUTCDate() + 1)
+    ) {
+      byDay.set(dayKey(d), { planned: [], activities: [] });
+    }
+  } else {
+    for (let i = -DAYS_BACK; i <= DAYS_AHEAD; i++) {
+      const d = new Date(today);
+      d.setUTCDate(d.getUTCDate() + i);
+      byDay.set(dayKey(d), { planned: [], activities: [] });
+    }
   }
   for (const p of planned) byDay.get(dayKey(p.date))?.planned.push(p);
-  for (const a of activities) byDay.get(dayKey(a.startDateLocal))?.activities.push(a);
+  for (const a of activities)
+    byDay.get(dayKey(a.startDateLocal))?.activities.push(a);
 
   const todayKey = dayKey(today);
 
@@ -88,7 +112,8 @@ export default async function CalendarPage() {
       marathon: "Marathon",
       custom: "Custom race",
     };
-    const goalLabel = goalLabels[activeProgram.goalType] ?? activeProgram.goalType;
+    const goalLabel =
+      goalLabels[activeProgram.goalType] ?? activeProgram.goalType;
     const elapsedDays = Math.floor(
       (today.getTime() - activeProgram.createdAt.getTime()) / 86_400_000,
     );
@@ -97,7 +122,8 @@ export default async function CalendarPage() {
       Math.max(1, Math.floor(elapsedDays / 7) + 1),
     );
     const chipClass =
-      FEASIBILITY_CHIP[activeProgram.feasibility] ?? "bg-neutral-100 text-neutral-700";
+      FEASIBILITY_CHIP[activeProgram.feasibility] ??
+      "bg-neutral-100 text-neutral-700";
     programHeader = (
       <section className="mb-5 rounded border border-neutral-200 bg-neutral-50 p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
@@ -144,19 +170,50 @@ export default async function CalendarPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
-      <header className="mb-6 flex items-center justify-between">
+      <header className="mb-6 space-y-4">
         <h1 className="text-2xl font-semibold">Calendar</h1>
-        <nav className="flex gap-3 text-sm">
-          <Link href="/dashboard" className="underline">Dashboard</Link>
-          <Link href="/coach" className="underline">Coach</Link>
-          <Link href="/checkin" className="underline">Check-in</Link>
-        </nav>
+        <AppNavTabs />
       </header>
       {programHeader}
-      <p className="mb-4 text-sm text-neutral-500">
-        Past {DAYS_BACK} days and next {DAYS_AHEAD} days. Planned sessions come
-        from your program; activities from Strava.
-      </p>
+      {showSafetyRetryWarning && (
+        <section className="mb-5 rounded border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+          <div className="font-medium">Safety rules adjusted this plan.</div>
+          <p className="mt-1">
+            The first generated plan violated physiological guardrails, so the AI coach ran a
+            second pass and saved the rule-compliant version. Review the workouts before following
+            them.
+          </p>
+        </section>
+      )}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex rounded-md border border-neutral-200 bg-white p-1 text-sm">
+          <Link
+            href="/calendar"
+            className={`rounded px-3 py-1.5 font-medium ${
+              !showFullPlan
+                ? "bg-neutral-900 text-white"
+                : "text-neutral-600 hover:bg-neutral-100"
+            }`}
+          >
+            Window
+          </Link>
+          <Link
+            href="/calendar?view=plan"
+            className={`rounded px-3 py-1.5 font-medium ${
+              showFullPlan
+                ? "bg-neutral-900 text-white"
+                : "text-neutral-600 hover:bg-neutral-100"
+            }`}
+          >
+            Full plan
+          </Link>
+        </div>
+        <p className="text-sm text-neutral-500">
+          {showFullPlan
+            ? "Every day in the active plan. Open a workout to see its structure."
+            : `Past ${DAYS_BACK} days and next ${DAYS_AHEAD} days. Activities come from Strava.`}
+        </p>
+      </div>
       <ol className="divide-y rounded border border-neutral-200">
         {[...byDay.entries()].map(([k, { planned: ps, activities: acts }]) => {
           const isToday = k === todayKey;
@@ -171,48 +228,38 @@ export default async function CalendarPage() {
               <div className="w-28 shrink-0">
                 <div className="font-mono text-xs text-neutral-500">{k}</div>
                 {isToday && (
-                  <div className="text-xs font-semibold text-amber-700">today</div>
+                  <div className="text-xs font-semibold text-amber-700">
+                    today
+                  </div>
                 )}
               </div>
               <div className="grow">
-                {empty && <div className="text-xs text-neutral-400">— rest —</div>}
+                {empty && (
+                  <div className="text-xs text-neutral-400">— rest —</div>
+                )}
                 {ps.map((p) => (
-                  <div key={p.id} className="text-sm">
-                    <span className="font-medium">{p.workoutType}</span>
-                    {p.durationMin ? (
-                      <span className="text-neutral-500"> · {p.durationMin}min</span>
-                    ) : null}
-                    {p.distanceM ? (
-                      <span className="text-neutral-500">
-                        {" "}· {(p.distanceM / 1000).toFixed(1)}km
-                      </span>
-                    ) : null}
-                    {p.isHard && (
-                      <span className="ml-2 rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-rose-700">
-                        hard
-                      </span>
-                    )}
-                    <span
-                      className={`ml-2 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
-                        STATUS_CHIP[p.status] ?? "bg-neutral-100 text-neutral-700"
-                      }`}
-                    >
-                      {p.status}
-                    </span>
-                    <div className="text-xs text-neutral-600">{p.description}</div>
-                  </div>
+                  <PlannedSessionCard key={p.id} session={p} compact />
                 ))}
                 {acts.map((a) => (
-                  <div key={a.id.toString()} className="text-sm text-neutral-700">
+                  <div
+                    key={a.id.toString()}
+                    className="text-sm text-neutral-700"
+                  >
                     <span className="text-emerald-700">✓</span>{" "}
-                    <span className="font-medium">{a.sportType}</span> ·{" "}
-                    {(a.distance / 1000).toFixed(1)}km ·{" "}
+                    <span className="font-medium">
+                      {sportLabel(a.sportType)}
+                    </span>{" "}
+                    · {(a.distance / 1000).toFixed(1)}km ·{" "}
                     {Math.round(a.movingTime / 60)}min
                     {a.tss !== null ? (
-                      <span className="text-neutral-500"> · TSS {Math.round(a.tss)}</span>
+                      <span className="text-neutral-500">
+                        {" "}
+                        · TSS {Math.round(a.tss)}
+                      </span>
                     ) : a.trimp !== null ? (
                       <span className="text-neutral-500">
-                        {" "}· TRIMP {Math.round(a.trimp)}
+                        {" "}
+                        · TRIMP {Math.round(a.trimp)}
                       </span>
                     ) : null}
                   </div>
@@ -224,4 +271,11 @@ export default async function CalendarPage() {
       </ol>
     </main>
   );
+}
+
+function hasSafetyRetryWarning(metaJson: unknown): boolean {
+  if (!metaJson || typeof metaJson !== "object" || Array.isArray(metaJson)) return false;
+  const safetyRetry = (metaJson as { safetyRetry?: unknown }).safetyRetry;
+  if (!safetyRetry || typeof safetyRetry !== "object" || Array.isArray(safetyRetry)) return false;
+  return (safetyRetry as { applied?: unknown }).applied === true;
 }

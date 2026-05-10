@@ -14,8 +14,8 @@
     "@coaching/db": "workspace:*",
     "@coaching/strava": "workspace:*",
     "@coaching/training": "workspace:*",
-    "bullmq": "5.21.2",
-    "ioredis": "5.4.1",
+    "bullmq": "5.76.6",
+    "ioredis": "5.10.1",
     "libsodium-wrappers": "0.7.15"
   },
   "devDependencies": {

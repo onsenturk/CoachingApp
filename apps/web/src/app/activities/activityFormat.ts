@@ -118,3 +118,20 @@ export function sportStyle(sportType: string) {
     }
   );
 }
+
+/** Short display name for a Strava sportType (e.g. "HIIT" instead of "HighIntensityIntervalTraining"). */
+const SPORT_LABEL: Record<string, string> = {
+  HighIntensityIntervalTraining: "HIIT",
+  MountainBikeRide: "MTB",
+  VirtualRide: "Virtual ride",
+  VirtualRun: "Virtual run",
+  TrailRun: "Trail run",
+  GravelRide: "Gravel",
+  WeightTraining: "Weights",
+  EBikeRide: "E-bike",
+  EMountainBikeRide: "E-MTB",
+};
+
+export function sportLabel(sportType: string): string {
+  return SPORT_LABEL[sportType] ?? sportType;
+}

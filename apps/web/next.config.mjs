@@ -20,19 +20,22 @@ if (existsSync(rootEnv)) {
 
 const nextConfig = {
   reactStrictMode: true,
-  experimental: {
-    typedRoutes: true,
-  },
+  typedRoutes: true,
   transpilePackages: [
     "@coaching/ai",
     "@coaching/db",
     "@coaching/strava",
     "@coaching/training",
   ],
+  // Next 16 ships Turbopack as the default bundler. Workspace packages
+  // re-export with explicit `.js` extensions for Node-ESM compatibility,
+  // so we map those back to `.ts` source for both Turbopack and webpack.
+  turbopack: {
+    // For each request that ends in `.js`, also try `.ts` and `.tsx`.
+    // Mirrors webpack's `extensionAlias` mapping below.
+    resolveExtensions: [".ts", ".tsx", ".mjs", ".js", ".jsx", ".json"],
+  },
   webpack: (config) => {
-    // Workspace packages re-export with explicit `.js` extensions for
-    // Node-ESM compatibility. Webpack must be told to also resolve those
-    // to `.ts` source when consumed via `transpilePackages`.
     config.resolve.extensionAlias = {
       ...(config.resolve.extensionAlias ?? {}),
       ".js": [".ts", ".tsx", ".js"],

@@ -2,7 +2,7 @@
  * Pure SVG, server-rendered visuals — no client JS, no chart library.
  * All inputs come from server components (Prisma).
  */
-import { sportStyle } from "./activityFormat";
+import { sportStyle, sportLabel } from "./activityFormat";
 
 export function SportBadge({ sportType }: { sportType: string }) {
   const s = sportStyle(sportType);
@@ -11,7 +11,7 @@ export function SportBadge({ sportType }: { sportType: string }) {
       className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${s.bg} ${s.text} ${s.ring}`}
     >
       <span aria-hidden>{s.emoji}</span>
-      <span>{sportType}</span>
+      <span>{sportLabel(sportType)}</span>
     </span>
   );
 }
@@ -67,9 +67,7 @@ export function WeeklyVolumeChart({ days }: { days: WeeklyDay[] }) {
                 rx={2}
                 fill={isToday ? "#0ea5e9" : "#7dd3fc"}
               >
-                <title>
-                  {d.date}: {(d.meters / 1000).toFixed(1)} km
-                </title>
+                <title>{`${d.date}: ${(d.meters / 1000).toFixed(1)} km`}</title>
               </rect>
               <text
                 x={x + barW / 2}
@@ -149,9 +147,7 @@ export function SportMixDonut({
               strokeDasharray={`${dash} ${C - dash}`}
               strokeDashoffset={-offset}
             >
-              <title>
-                {s.sportType}: {(s.meters / 1000).toFixed(1)} km ({(frac * 100).toFixed(0)}%)
-              </title>
+              <title>{`${sportLabel(s.sportType)}: ${(s.meters / 1000).toFixed(1)} km (${(frac * 100).toFixed(0)}%)`}</title>
             </circle>
           );
           offset += dash;
@@ -184,7 +180,7 @@ export function SportMixDonut({
                 style={{ backgroundColor: sportStyle(s.sportType).hex }}
                 aria-hidden
               />
-              <span className="flex-1 text-neutral-700">{s.sportType}</span>
+              <span className="flex-1 text-neutral-700">{sportLabel(s.sportType)}</span>
               <span className="font-mono text-neutral-500">{pct}%</span>
             </li>
           );
@@ -218,7 +214,7 @@ export function bucketByDay(
     if (sportFilter && !sportFilter(a)) continue;
     const key = a.startDate.toISOString().slice(0, 10);
     const idx = idxByDate.get(key);
-    if (idx != null) out[idx].meters += a.distance;
+    if (idx != null) out[idx]!.meters += a.distance;
   }
   return out;
 }

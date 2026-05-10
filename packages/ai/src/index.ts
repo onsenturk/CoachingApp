@@ -1,3 +1,3 @@
-export * from "./govern.js";
-export * from "./foundryClient.js";
-export * as schemas from "./schemas/index.js";
+export * from "./govern";
+export * from "./foundryClient";
+export * as schemas from "./schemas/index";

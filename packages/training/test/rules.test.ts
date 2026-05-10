@@ -18,6 +18,17 @@ function week(weekIndex: number, sessions: Partial<(typeof baseSession & { dayOf
   }));
 }
 
+function volumeWeek(weekIndex: number, totalM: number) {
+  const runM = totalM / 4;
+  return week(weekIndex, [
+    { dayOfWeek: 1, distanceM: runM },
+    { dayOfWeek: 2, distanceM: runM },
+    { dayOfWeek: 4, distanceM: runM },
+    { dayOfWeek: 6, distanceM: runM },
+    { dayOfWeek: 7, workoutType: "rest", distanceM: 0 },
+  ]);
+}
+
 describe("validatePlan", () => {
   it("flags back-to-back hard days", () => {
     const plan: PlanCandidate = {
@@ -61,6 +72,39 @@ describe("validatePlan", () => {
     };
     const r = validatePlan(plan);
     expect(r.violations.some((v) => v.code === "LONG_RUN_TOO_BIG")).toBe(true);
+  });
+
+  it("flags >10% volume ramp by default", () => {
+    const plan: PlanCandidate = {
+      weeksTotal: 1,
+      sessionsPerWk: 4,
+      baselineWeeklyVolumeM: 20_000,
+      sessions: volumeWeek(1, 26_080),
+    };
+
+    const r = validatePlan(plan);
+
+    expect(r.violations.some((v) => v.code === "VOLUME_RAMP_EXCEEDED")).toBe(true);
+  });
+
+  it("allows early ramp for short-race goals already within current prediction", () => {
+    const plan: PlanCandidate = {
+      weeksTotal: 3,
+      sessionsPerWk: 4,
+      baselineWeeklyVolumeM: 20_000,
+      goalDistanceM: 10_000,
+      goalTimeSec: 50 * 60,
+      currentPredictedGoalTimeSec: 48 * 60 + 44,
+      sessions: [
+        ...volumeWeek(1, 26_080),
+        ...volumeWeek(2, 22_000),
+        ...volumeWeek(3, 26_994),
+      ],
+    };
+
+    const r = validatePlan(plan);
+
+    expect(r.violations.some((v) => v.code === "VOLUME_RAMP_EXCEEDED")).toBe(false);
   });
 });
 

@@ -3,20 +3,19 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@coaching/db";
 import { SyncNowButton } from "./SyncNowButton";
+import { formatRelativeTime } from "../activities/activityFormat";
 import {
-  estimateCalories,
-  formatDistance,
-  formatDuration,
-  formatRelativeTime,
-} from "../activities/activityFormat";
-import {
-  SportBadge,
   WeeklyVolumeChart,
   SportMixDonut,
   bucketByDay,
   bucketBySport,
 } from "../activities/visuals";
 import { baseline as baselineFns, racePrediction } from "@coaching/training";
+import { AppNavTabs } from "@/components/AppNavTabs";
+import { ActivityDetailCard } from "@/components/ActivityDetailCard";
+import { PlannedSessionCard } from "@/components/PlannedSessionCard";
+import { SessionCompletionActions } from "@/components/SessionCompletionActions";
+import { findBestActivityMatch } from "@/lib/activitySessionMatching";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -30,39 +29,45 @@ export default async function DashboardPage() {
 
   const RUN_SPORT_TYPES = ["Run", "TrailRun", "VirtualRun"];
 
-  const [user, recentActivities, last30, runs90, lastSynced, todayPlanned] = await Promise.all([
-    prisma.user.findUnique({ where: { id: userId } }),
-    prisma.activity.findMany({
-      where: { userId },
-      orderBy: { startDate: "desc" },
-      take: 5,
-    }),
-    prisma.activity.findMany({
-      where: { userId, startDate: { gte: since30 } },
-      orderBy: { startDate: "desc" },
-      select: { sportType: true, distance: true, startDate: true },
-    }),
-    prisma.activity.findMany({
-      where: {
-        userId,
-        startDate: { gte: since90 },
-        sportType: { in: RUN_SPORT_TYPES },
-      },
-      orderBy: { startDate: "desc" },
-      select: { startDate: true, sportType: true, distance: true, movingTime: true },
-    }),
-    prisma.activity.findFirst({
-      where: { userId },
-      orderBy: { createdAt: "desc" },
-      select: { createdAt: true },
-    }),
-    prisma.plannedSession.findFirst({
-      where: {
-        program: { userId },
-        date: new Date(new Date().toISOString().slice(0, 10)),
-      },
-    }),
-  ]);
+  const [user, activeProgram, recentActivities, last30, runs90, lastSynced] =
+    await Promise.all([
+      prisma.user.findUnique({ where: { id: userId } }),
+      prisma.program.findFirst({
+        where: { userId, status: "active" },
+        orderBy: { createdAt: "desc" },
+        select: { id: true },
+      }),
+      prisma.activity.findMany({
+        where: { userId },
+        orderBy: { startDate: "desc" },
+        take: 5,
+        include: { summary: { select: { text: true } } },
+      }),
+      prisma.activity.findMany({
+        where: { userId, startDate: { gte: since30 } },
+        orderBy: { startDate: "desc" },
+        select: { sportType: true, distance: true, startDate: true },
+      }),
+      prisma.activity.findMany({
+        where: {
+          userId,
+          startDate: { gte: since90 },
+          sportType: { in: RUN_SPORT_TYPES },
+        },
+        orderBy: { startDate: "desc" },
+        select: {
+          startDate: true,
+          sportType: true,
+          distance: true,
+          movingTime: true,
+        },
+      }),
+      prisma.activity.findFirst({
+        where: { userId },
+        orderBy: { createdAt: "desc" },
+        select: { createdAt: true },
+      }),
+    ]);
 
   // Race predictions (Riegel) from recent run efforts.
   const runBaseline = baselineFns.computeRunBaseline(
@@ -82,17 +87,39 @@ export default async function DashboardPage() {
     { thresholdPaceSecPerKm: runBaseline.thresholdPaceSecPerKm },
   );
 
+  const recentActivityDates = [
+    ...new Set(
+      recentActivities.map((activity) =>
+        activity.startDateLocal.toISOString().slice(0, 10),
+      ),
+    ),
+  ];
+  const recentPlannedSessions = recentActivityDates.length
+    ? await prisma.plannedSession.findMany({
+        where: {
+          programId: activeProgram?.id ?? "",
+          date: { in: recentActivityDates.map((date) => new Date(date)) },
+        },
+        orderBy: { date: "desc" },
+      })
+    : [];
+  const todayPlanned = activeProgram
+    ? await prisma.plannedSession.findFirst({
+        where: {
+          programId: activeProgram.id,
+          date: new Date(new Date().toISOString().slice(0, 10)),
+        },
+      })
+    : null;
+
   return (
     <main className="mx-auto max-w-3xl space-y-8 px-6 py-10">
-      <header className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <nav className="flex items-center gap-3 text-sm">
-          <Link href="/checkin" className="underline">Check-in</Link>
-          <Link href="/calendar" className="underline">Calendar</Link>
-          <Link href="/coach" className="underline">Coach</Link>
-          <Link href="/profile" className="underline">Profile</Link>
+      <header className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-2xl font-semibold">Dashboard</h1>
           <SyncNowButton />
-        </nav>
+        </div>
+        <AppNavTabs />
       </header>
 
       {lastSynced?.createdAt && (
@@ -105,13 +132,21 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      <section className="rounded border border-neutral-200 p-4">
-        <h2 className="mb-2 text-sm font-medium text-neutral-500">Today&apos;s session</h2>
+      <section className="rounded border border-neutral-200 bg-neutral-50 p-4">
+        <h2 className="mb-2 text-sm font-medium text-neutral-500">
+          Today&apos;s session
+        </h2>
         {todayPlanned ? (
-          <div>
-            <div className="text-lg font-medium">{todayPlanned.workoutType}</div>
-            <p className="text-neutral-600">{todayPlanned.description}</p>
-          </div>
+          <PlannedSessionCard
+            session={todayPlanned}
+            defaultOpen
+            actions={
+              <SessionCompletionActions
+                sessionId={todayPlanned.id}
+                status={todayPlanned.status}
+              />
+            }
+          />
         ) : (
           <p className="text-neutral-500">No session planned for today.</p>
         )}
@@ -128,8 +163,9 @@ export default async function DashboardPage() {
             help={
               <>
                 <p>
-                  <b>Chronic Training Load</b> — exponentially-weighted average of your daily
-                  training stress over ~42 days. Long-term aerobic fitness.
+                  <b>Chronic Training Load</b> — exponentially-weighted average
+                  of your daily training stress over ~42 days. Long-term aerobic
+                  fitness.
                 </p>
                 <p className="mt-2">Rough bands (running):</p>
                 <ul className="mt-1 list-disc pl-4">
@@ -139,7 +175,8 @@ export default async function DashboardPage() {
                   <li>130+ — elite volume</li>
                 </ul>
                 <p className="mt-2">
-                  Healthy build = ~3–7 pts/week. &gt;8 pts/week often means injury risk.
+                  Healthy build = ~3–7 pts/week. &gt;8 pts/week often means
+                  injury risk.
                 </p>
               </>
             }
@@ -152,12 +189,13 @@ export default async function DashboardPage() {
             help={
               <>
                 <p>
-                  <b>Acute Training Load</b> — 7-day exponentially-weighted average. How cooked
-                  you are right now.
+                  <b>Acute Training Load</b> — 7-day exponentially-weighted
+                  average. How cooked you are right now.
                 </p>
                 <p className="mt-2">
-                  Useful mainly relative to CTL: when ATL &gt; CTL you are accumulating fatigue;
-                  when ATL &lt; CTL you are recovering / tapering.
+                  Useful mainly relative to CTL: when ATL &gt; CTL you are
+                  accumulating fatigue; when ATL &lt; CTL you are recovering /
+                  tapering.
                 </p>
               </>
             }
@@ -170,7 +208,8 @@ export default async function DashboardPage() {
             help={
               <>
                 <p>
-                  <b>Training Stress Balance</b> = CTL − ATL. Readiness indicator.
+                  <b>Training Stress Balance</b> = CTL − ATL. Readiness
+                  indicator.
                 </p>
                 <ul className="mt-2 list-disc pl-4">
                   <li>
@@ -195,9 +234,10 @@ export default async function DashboardPage() {
         </div>
         {(!user?.currentCtl || user.currentCtl === 0) && (
           <p className="mt-3 text-xs text-neutral-500">
-            Showing 0 because none of your synced activities have a power or heart-rate-based
-            training stress score yet. Add your FTP / HR thresholds in settings, or sync rides
-            with power data, to see these populate.
+            Showing 0 because none of your synced activities have a power or
+            heart-rate-based training stress score yet. Add your FTP / HR
+            thresholds in settings, or sync rides with power data, to see these
+            populate.
           </p>
         )}
       </section>
@@ -207,7 +247,9 @@ export default async function DashboardPage() {
           <WeeklyVolumeChart days={bucketByDay(last30, 7)} />
         </div>
         <div className="rounded border border-neutral-200 p-4">
-          <h2 className="mb-2 text-xs uppercase tracking-wide text-neutral-500">Sport mix</h2>
+          <h2 className="mb-2 text-xs uppercase tracking-wide text-neutral-500">
+            Sport mix
+          </h2>
           <SportMixDonut slices={bucketBySport(last30)} />
         </div>
       </section>
@@ -215,7 +257,9 @@ export default async function DashboardPage() {
       {predictions.length > 0 && (
         <section className="rounded border border-neutral-200 p-4">
           <div className="mb-3 flex items-baseline justify-between">
-            <h2 className="text-sm font-medium text-neutral-500">Predicted race times</h2>
+            <h2 className="text-sm font-medium text-neutral-500">
+              Predicted race times
+            </h2>
             <span className="text-[10px] text-neutral-400">
               Riegel · last 12 weeks
             </span>
@@ -226,7 +270,9 @@ export default async function DashboardPage() {
                 key={p.label}
                 className="rounded-md border border-neutral-100 bg-neutral-50 p-3"
                 title={
-                  p.source === "best-effort" && p.basisDistanceM && p.basisTimeSec
+                  p.source === "best-effort" &&
+                  p.basisDistanceM &&
+                  p.basisTimeSec
                     ? `Scaled from ${(p.basisDistanceM / 1000).toFixed(1)}km in ${racePrediction.fmtPredictedTime(p.basisTimeSec)} on ${p.basisDate?.toISOString().slice(0, 10)}`
                     : "Estimated from threshold pace"
                 }
@@ -242,7 +288,9 @@ export default async function DashboardPage() {
                 </div>
                 <div
                   className={`mt-1 text-[10px] ${
-                    p.source === "best-effort" ? "text-emerald-700" : "text-amber-700"
+                    p.source === "best-effort"
+                      ? "text-emerald-700"
+                      : "text-amber-700"
                   }`}
                 >
                   {p.source === "best-effort" ? "from recent run" : "estimated"}
@@ -251,48 +299,44 @@ export default async function DashboardPage() {
             ))}
           </div>
           <p className="mt-3 text-[11px] text-neutral-400">
-            Predictions use Pete Riegel&apos;s formula (T₂ = T₁ × (D₂/D₁)<sup>1.06</sup>) on
-            your fastest scaled effort in the last 12 weeks. Real race times also depend on
-            course, weather, and taper.
+            Predictions use Pete Riegel&apos;s formula (T₂ = T₁ × (D₂/D₁)
+            <sup>1.06</sup>) on your fastest scaled effort in the last 12 weeks.
+            Real race times also depend on course, weather, and taper.
           </p>
         </section>
       )}
 
       <section className="rounded border border-neutral-200 p-4">
         <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-sm font-medium text-neutral-500">Recent activities</h2>
-          <Link href="/activities" className="text-xs text-neutral-500 underline">
+          <h2 className="text-sm font-medium text-neutral-500">
+            Recent activities
+          </h2>
+          <Link
+            href="/activities"
+            className="text-xs text-neutral-500 underline"
+          >
             See all →
           </Link>
         </div>
         {recentActivities.length === 0 ? (
           <p className="text-neutral-500">No activities synced yet.</p>
         ) : (
-          <ul className="divide-y divide-neutral-100">
-            {recentActivities.map((a) => {
-              const kcal = estimateCalories(a, user?.weightKg ?? 75);
+          <div className="space-y-3">
+            {recentActivities.map((activity) => {
+              const plannedSession = recentPlannedSessions.find(
+                (session) => findBestActivityMatch(session, [activity]) != null,
+              );
               return (
-                <li key={a.id.toString()} className="flex items-center gap-3 py-2.5">
-                  <SportBadge sportType={a.sportType} />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium text-neutral-800">{a.name}</div>
-                    <div className="text-xs text-neutral-500">
-                      {a.startDateLocal.toISOString().slice(0, 10)} ·{" "}
-                      {formatDistance(a.distance)} · {formatDuration(a.movingTime)} ·{" "}
-                      {kcal.toLocaleString()} kcal
-                      {a.averageHr ? ` · ${Math.round(a.averageHr)} bpm` : ""}
-                    </div>
-                  </div>
-                  <span
-                    className="shrink-0 text-[10px] text-neutral-400"
-                    title={a.createdAt.toISOString()}
-                  >
-                    synced {formatRelativeTime(a.createdAt)}
-                  </span>
-                </li>
+                <ActivityDetailCard
+                  key={activity.id.toString()}
+                  activity={activity}
+                  weightKg={user?.weightKg ?? 75}
+                  plannedSession={plannedSession ?? null}
+                  compact
+                />
               );
             })}
-          </ul>
+          </div>
         )}
       </section>
     </main>
@@ -310,7 +354,10 @@ function Stat({
   sub?: string;
   value: number | null | undefined;
   help?: React.ReactNode;
-  interpretation?: { tone: "good" | "warn" | "bad" | "neutral"; text: string } | null;
+  interpretation?: {
+    tone: "good" | "warn" | "bad" | "neutral";
+    text: string;
+  } | null;
 }) {
   const toneClass =
     interpretation?.tone === "good"
@@ -323,11 +370,15 @@ function Stat({
 
   return (
     <div className="group relative">
-      <div className="text-xs font-medium uppercase tracking-wide text-neutral-700">{label}</div>
+      <div className="text-xs font-medium uppercase tracking-wide text-neutral-700">
+        {label}
+      </div>
       <div className="text-2xl font-semibold">{value?.toFixed(0) ?? "—"}</div>
       {sub && <div className="mt-0.5 text-[10px] text-neutral-400">{sub}</div>}
       {interpretation && (
-        <div className={`mt-1 text-[11px] font-medium ${toneClass}`}>{interpretation.text}</div>
+        <div className={`mt-1 text-[11px] font-medium ${toneClass}`}>
+          {interpretation.text}
+        </div>
       )}
       {help && (
         <div
@@ -350,20 +401,28 @@ function interpretCtl(ctl: number | null | undefined) {
   return { tone: "warn" as const, text: "Elite volume — manage load" };
 }
 
-function interpretAtl(atl: number | null | undefined, ctl: number | null | undefined) {
+function interpretAtl(
+  atl: number | null | undefined,
+  ctl: number | null | undefined,
+) {
   if (atl == null || ctl == null || (atl === 0 && ctl === 0)) return null;
   const ratio = ctl > 0 ? atl / ctl : 1;
   if (ratio > 1.3) return { tone: "bad" as const, text: "Heavy fatigue spike" };
-  if (ratio > 1.1) return { tone: "warn" as const, text: "Accumulating fatigue" };
-  if (ratio < 0.8) return { tone: "good" as const, text: "Recovering / tapering" };
+  if (ratio > 1.1)
+    return { tone: "warn" as const, text: "Accumulating fatigue" };
+  if (ratio < 0.8)
+    return { tone: "good" as const, text: "Recovering / tapering" };
   return { tone: "neutral" as const, text: "Steady" };
 }
 
 function interpretTsb(tsb: number | null | undefined) {
   if (tsb == null) return null;
-  if (tsb > 25) return { tone: "warn" as const, text: "Too rested — losing fitness" };
+  if (tsb > 25)
+    return { tone: "warn" as const, text: "Too rested — losing fitness" };
   if (tsb >= 5) return { tone: "good" as const, text: "Fresh, race-ready" };
-  if (tsb >= -10) return { tone: "neutral" as const, text: "Productive training zone" };
-  if (tsb >= -30) return { tone: "warn" as const, text: "Overload — monitor recovery" };
+  if (tsb >= -10)
+    return { tone: "neutral" as const, text: "Productive training zone" };
+  if (tsb >= -30)
+    return { tone: "warn" as const, text: "Overload — monitor recovery" };
   return { tone: "bad" as const, text: "High injury / illness risk" };
 }

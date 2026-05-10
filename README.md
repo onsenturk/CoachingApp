@@ -14,6 +14,10 @@ proposes anything physiologically unsound.
 > end-to-end. Plan generation and coach chat are wired through the governance
 > layer but require a configured Azure AI Foundry project to actually run.
 
+## Documentation
+
+- [Application stack and requirements](docs/application-stack-and-requirements.md) - current stack, functional requirements, non-functional requirements, constraints, and validation commands.
+
 ## What it does
 
 - **Strava-only data source** (v1). OAuth sign-in. Pulls activities + streams.
@@ -43,7 +47,7 @@ proposes anything physiologically unsound.
 
 ```
 apps/
-  web/        Next.js 15 (App Router) + NextAuth (Strava) + check-in + dashboard
+  web/        Next.js 16 (App Router) + NextAuth/Auth.js (Strava) + dashboard + calendar
   worker/     BullMQ workers: strava-sync, training-load, activity-summary
 packages/
   db/         Prisma schema + client
@@ -58,8 +62,8 @@ scripts/
 
 ## Prerequisites
 
-- Node ≥ 20.11.0
-- pnpm 9.12.0 (`corepack enable && corepack prepare pnpm@9.12.0 --activate`)
+- Node >= 22.12.0
+- pnpm 11.0.9 (`corepack enable && corepack prepare pnpm@11.0.9 --activate`)
 - Docker Desktop (for local Postgres + Redis)
 - Azure CLI + an Azure AI Foundry project (only needed once you want plan/chat agents to run)
 - A Strava API application

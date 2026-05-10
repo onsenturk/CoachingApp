@@ -22,6 +22,8 @@ export const GoalInputSchema = z
     sessionsPerWk: z.number().int().min(3).max(7),
     /** Hard-coded "run" for v1. */
     sport: z.literal("run"),
+    /** Required when replacing an existing active program. */
+    replaceActiveProgram: z.boolean().optional().default(false),
   })
   .refine((v) => new Date(v.goalDate).getTime() > Date.now() - 86_400_000, {
     message: "Goal date must not be in the past.",

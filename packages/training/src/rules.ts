@@ -10,6 +10,10 @@
 export const RULES = {
   /** Max weekly volume increase vs trailing 4-week average. Classic 10% rule. */
   MAX_WEEKLY_VOLUME_RAMP_PCT: 10,
+  /** Early-plan ramp allowed when the target is already slower than current prediction. */
+  MAX_MAINTENANCE_GOAL_EARLY_RAMP_PCT: 35,
+  /** Number of early plan weeks where maintenance-goal ramp is allowed. */
+  MAINTENANCE_GOAL_EARLY_RAMP_WEEKS: 3,
   /** Polarized distribution: at least this fraction of weekly time in Z1/Z2. */
   MIN_EASY_FRACTION: 0.8,
   /** Polarized distribution: max fraction of weekly time at threshold/VO2. */
@@ -64,6 +68,8 @@ export interface PlanCandidate {
   sessionsPerWk: number;
   sessions: PlannedSessionLite[];
   goalDistanceM?: number; // race distance
+  goalTimeSec?: number;
+  currentPredictedGoalTimeSec?: number;
   baselineLongestM?: number;
   baselineWeeklyVolumeM?: number;
 }
@@ -109,6 +115,12 @@ export function validatePlan(plan: PlanCandidate): ValidationResult {
   const totals = weeklyTotals(plan);
   const sortedWeeks = [...totals.keys()].sort((a, b) => a - b);
 
+  const isMaintenanceGoal =
+    plan.goalTimeSec != null &&
+    plan.currentPredictedGoalTimeSec != null &&
+    plan.goalTimeSec >= plan.currentPredictedGoalTimeSec;
+  const isShortRaceGoal = plan.goalDistanceM != null && plan.goalDistanceM <= 10_000;
+
   // Adaptive long-run cap: lower-frequency plans naturally concentrate volume in
   // the long run, so a strict 35% cap forces unrealistic structures.
   //   ≤3 sessions/wk → 50%, 4 → 42%, 5+ → 35% (configured default).
@@ -134,11 +146,17 @@ export function validatePlan(plan: PlanCandidate): ValidationResult {
     }
     if (trailing.length === 0) continue;
     const avg = trailing.reduce((a, b) => a + b, 0) / trailing.length;
-    if (avg > 0 && (cur - avg) / avg > RULES.MAX_WEEKLY_VOLUME_RAMP_PCT / 100) {
+    const maxRampPct =
+      isMaintenanceGoal &&
+      isShortRaceGoal &&
+      wk <= RULES.MAINTENANCE_GOAL_EARLY_RAMP_WEEKS
+        ? RULES.MAX_MAINTENANCE_GOAL_EARLY_RAMP_PCT
+        : RULES.MAX_WEEKLY_VOLUME_RAMP_PCT;
+    if (avg > 0 && (cur - avg) / avg > maxRampPct / 100) {
       violations.push({
         code: "VOLUME_RAMP_EXCEEDED",
         weekIndex: wk,
-        message: `Week ${wk} volume up ${(((cur - avg) / avg) * 100).toFixed(1)}% vs 4-week avg (max ${RULES.MAX_WEEKLY_VOLUME_RAMP_PCT}%).`,
+        message: `Week ${wk} volume up ${(((cur - avg) / avg) * 100).toFixed(1)}% vs 4-week avg (max ${maxRampPct}%).`,
       });
     }
   }

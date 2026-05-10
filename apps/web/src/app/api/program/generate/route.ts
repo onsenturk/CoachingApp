@@ -30,6 +30,7 @@ import {
 } from "@coaching/ai";
 import {
   baseline as baselineFns,
+  racePrediction,
   rules,
   targetPaces,
   zones,
@@ -74,8 +75,20 @@ export async function POST(req: Request) {
   // 2. Build baseline from last 90 days of run activities.
   const since = new Date();
   since.setUTCDate(since.getUTCDate() - 90);
-  const [user, activities] = await Promise.all([
+  const [user, activeProgram, activities] = await Promise.all([
     prisma.user.findUnique({ where: { id: userId } }),
+    prisma.program.findFirst({
+      where: { userId, status: "active" },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        goalType: true,
+        goalTargetSec: true,
+        goalDate: true,
+        weeksTotal: true,
+        createdAt: true,
+      },
+    }),
     prisma.activity.findMany({
       where: {
         userId,
@@ -86,6 +99,17 @@ export async function POST(req: Request) {
     }),
   ]);
   if (!user) return new NextResponse("User not found", { status: 404 });
+
+  if (activeProgram && !goal.replaceActiveProgram) {
+    return NextResponse.json(
+      {
+        error: "Replacing the active plan requires confirmation.",
+        requiresReplacementApproval: true,
+        activeProgram,
+      },
+      { status: 409 },
+    );
+  }
 
   const runBaseline = baselineFns.computeRunBaseline(
     activities.map((a) => ({
@@ -98,6 +122,16 @@ export async function POST(req: Request) {
       weightedAvgWatts: a.weightedAvgWatts ?? undefined,
     })),
   );
+  const currentGoalPrediction = racePrediction
+    .predictRaceTimes(
+      activities.map((a) => ({
+        startDate: a.startDate,
+        distanceM: a.distance,
+        movingTimeSec: a.movingTime,
+      })),
+      { thresholdPaceSecPerKm: runBaseline.thresholdPaceSecPerKm },
+    )
+    .find((prediction) => Math.abs(prediction.distanceM - goal.distanceM) < 50);
 
   // 3. Goal-feasibility (only when target time + threshold-pace estimate exist).
   let feasibility: rules.FeasibilityResult = {
@@ -177,6 +211,14 @@ export async function POST(req: Request) {
     paces: racePaces,
     hrZones,
     feasibility,
+    currentGoalPrediction: currentGoalPrediction
+      ? {
+          label: currentGoalPrediction.label,
+          predictedSec: currentGoalPrediction.predictedSec,
+          paceSecPerKm: currentGoalPrediction.paceSecPerKm,
+          source: currentGoalPrediction.source,
+        }
+      : null,
     constraints: rules.RULES,
     today: new Date().toISOString().slice(0, 10),
   };
@@ -319,25 +361,32 @@ export async function POST(req: Request) {
       isHard: s.isHard,
     })),
     goalDistanceM: goal.distanceM,
+    goalTimeSec: goal.targetTimeSec ?? undefined,
+    currentPredictedGoalTimeSec: currentGoalPrediction?.predictedSec,
     baselineLongestM: runBaseline.longestRunM,
     baselineWeeklyVolumeM: runBaseline.weeklyVolumeM,
   });
 
+  let safetyRetryWarning:
+    | { message: string; violations: rules.RuleViolation[] }
+    | null = null;
+
   if (!validation.ok) {
+    const firstAttemptViolations = validation.violations;
     await audit({
       agent: "plan-generator",
       tool: "invoke",
-      decision: "warn",
+      decision: "allow",
       reason: "Plan violated rules — retrying once.",
       policyName: "rules",
-      evidenceJson: { latencyMs, violations: validation.violations },
+      evidenceJson: { latencyMs, violations: firstAttemptViolations },
     });
     const fixMessage = JSON.stringify({
       ...agentPayload,
       previousPlanRejected: true,
       reason:
         "A prior plan attempt violated the physiological constraints listed below. Generate a NEW plan that satisfies every rule. Same JSON schema. Do not reference the previous plan.",
-      violations: validation.violations,
+      violations: firstAttemptViolations,
     });
     // Send as a fresh request (no previous_response_id) to avoid cumulative
     // content-filter triggers on replayed conversation context.
@@ -361,9 +410,18 @@ export async function POST(req: Request) {
         isHard: s.isHard,
       })),
       goalDistanceM: goal.distanceM,
+      goalTimeSec: goal.targetTimeSec ?? undefined,
+      currentPredictedGoalTimeSec: currentGoalPrediction?.predictedSec,
       baselineLongestM: runBaseline.longestRunM,
       baselineWeeklyVolumeM: runBaseline.weeklyVolumeM,
     });
+    if (validation.ok) {
+      safetyRetryWarning = {
+        message:
+          "The first plan attempt violated physiological rules, so the AI coach regenerated a safer plan. Review the new plan before following it.",
+        violations: firstAttemptViolations,
+      };
+    }
   }
 
   if (!validation.ok) {
@@ -413,6 +471,14 @@ export async function POST(req: Request) {
         metaJson: {
           notes: plan.notes ?? null,
           suggestedAlternative: plan.suggestedAlternative ?? null,
+          safetyRetry: safetyRetryWarning
+            ? {
+                applied: true,
+                acceptedAt: null,
+                message: safetyRetryWarning.message,
+                violations: safetyRetryWarning.violations,
+              }
+            : null,
           latencyMs,
         } as object,
       },
@@ -442,5 +508,6 @@ export async function POST(req: Request) {
     sessionsCount: plan.sessions.length,
     feasibility: plan.feasibility,
     feasibilityReason: plan.feasibilityReason,
+    warnings: safetyRetryWarning ? [safetyRetryWarning] : [],
   });
 }

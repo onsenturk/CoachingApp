@@ -79,7 +79,9 @@ export function predictRaceTimes(
       e.movingTimeSec / (e.distanceM / 1000) >= 150,
   );
 
-  return TARGETS.map(({ label, distanceM }) => {
+  const predictions: RacePrediction[] = [];
+
+  for (const { label, distanceM } of TARGETS) {
     let best: { effort: RecentEffort; predicted: number } | null = null;
     for (const eff of recent) {
       // Riegel is most reliable when scaling within ~3x. Skip wild extrapolations
@@ -93,7 +95,7 @@ export function predictRaceTimes(
     }
 
     if (best) {
-      return {
+      predictions.push({
         label,
         distanceM,
         predictedSec: Math.round(best.predicted),
@@ -102,7 +104,8 @@ export function predictRaceTimes(
         basisDate: best.effort.startDate,
         basisDistanceM: best.effort.distanceM,
         basisTimeSec: best.effort.movingTimeSec,
-      };
+      });
+      continue;
     }
 
     // Fallback: threshold pace ≈ ~1-hour race pace. Riegel from 1h@threshold.
@@ -110,17 +113,17 @@ export function predictRaceTimes(
       const oneHourDistanceM =
         (3600 / opts.thresholdPaceSecPerKm) * 1000; // meters covered in 1h at threshold
       const predicted = riegel(3600, oneHourDistanceM, distanceM);
-      return {
+      predictions.push({
         label,
         distanceM,
         predictedSec: Math.round(predicted),
         paceSecPerKm: predicted / (distanceM / 1000),
         source: "threshold" as const,
-      };
+      });
     }
+  }
 
-    return null;
-  }).filter((p): p is RacePrediction => p !== null);
+  return predictions;
 }
 
 export function fmtPredictedTime(sec: number): string {

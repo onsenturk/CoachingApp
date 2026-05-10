@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@coaching/db";
 import { GoalForm } from "./GoalForm";
+import { AppNavTabs } from "@/components/AppNavTabs";
 
 export default async function CoachPage() {
   const session = await auth();
@@ -19,13 +20,9 @@ export default async function CoachPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
-      <header className="mb-6 flex items-center justify-between">
+      <header className="mb-6 space-y-4">
         <h1 className="text-2xl font-semibold">Coach</h1>
-        <nav className="flex gap-3 text-sm">
-          <Link href="/dashboard" className="underline">Dashboard</Link>
-          <Link href="/calendar" className="underline">Calendar</Link>
-          <Link href="/profile" className="underline">Profile</Link>
-        </nav>
+        <AppNavTabs />
       </header>
 
       {!foundryConfigured && (
@@ -39,7 +36,10 @@ export default async function CoachPage() {
       )}
 
       {activeProgram ? (
-        <ActiveProgramCard program={activeProgram} foundryConfigured={foundryConfigured} />
+        <ActiveProgramCard
+          program={activeProgram}
+          foundryConfigured={foundryConfigured}
+        />
       ) : (
         <NewProgramCard foundryConfigured={foundryConfigured} />
       )}
@@ -86,7 +86,9 @@ function ActiveProgramCard({
 }) {
   const startedAt = program.createdAt;
   const totalDays = program.weeksTotal * 7;
-  const elapsedDays = Math.floor((Date.now() - startedAt.getTime()) / 86_400_000);
+  const elapsedDays = Math.floor(
+    (Date.now() - startedAt.getTime()) / 86_400_000,
+  );
   const currentWeek = Math.min(
     program.weeksTotal,
     Math.max(1, Math.floor(elapsedDays / 7) + 1),
@@ -94,14 +96,17 @@ function ActiveProgramCard({
   const daysLeft = Math.max(0, totalDays - elapsedDays);
 
   const goalLabel = formatGoalLabel(program);
-  const targetTime = program.goalTargetSec ? formatHms(program.goalTargetSec) : null;
+  const targetTime = program.goalTargetSec
+    ? formatHms(program.goalTargetSec)
+    : null;
 
   const colors: Record<string, string> = {
     green: "bg-emerald-100 text-emerald-800",
     amber: "bg-amber-100 text-amber-800",
     red: "bg-rose-100 text-rose-800",
   };
-  const chipClass = colors[program.feasibility] ?? "bg-neutral-100 text-neutral-700";
+  const chipClass =
+    colors[program.feasibility] ?? "bg-neutral-100 text-neutral-700";
 
   return (
     <section className="space-y-5">
@@ -117,7 +122,9 @@ function ActiveProgramCard({
         <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
           <Field
             label="Race day"
-            value={program.goalDate ? program.goalDate.toLocaleDateString() : "—"}
+            value={
+              program.goalDate ? program.goalDate.toLocaleDateString() : "—"
+            }
           />
           <Field label="Target time" value={targetTime ?? "—"} />
           <Field
@@ -126,23 +133,31 @@ function ActiveProgramCard({
           />
           <Field label="Days left" value={String(daysLeft)} />
           <Field label="Sessions / wk" value={String(program.sessionsPerWk)} />
-          <Field label="Sessions total" value={String(program._count.plannedSessions)} />
+          <Field
+            label="Sessions total"
+            value={String(program._count.plannedSessions)}
+          />
         </dl>
         {program.feasibilityReason && (
-          <p className="mt-3 text-xs text-neutral-600">{program.feasibilityReason}</p>
+          <p className="mt-3 text-xs text-neutral-600">
+            {program.feasibilityReason}
+          </p>
         )}
         <div className="mt-4 flex gap-3 text-sm">
-          <Link href="/calendar" className="underline">View calendar →</Link>
+          <Link href="/calendar" className="underline">
+            View calendar →
+          </Link>
         </div>
       </div>
 
       <div className="rounded border border-neutral-200 p-5">
         <h2 className="text-base font-medium">Replace this plan</h2>
         <p className="mt-1 mb-4 text-sm text-neutral-600">
-          Generating a new plan archives the current one (status &ldquo;replaced&rdquo;).
+          Approve replacement before generating. The current plan is archived only after the new
+          plan is created successfully.
         </p>
         <fieldset disabled={!foundryConfigured} className="space-y-4">
-          <GoalForm />
+          <GoalForm requiresReplacementApproval />
         </fieldset>
       </div>
     </section>
@@ -152,7 +167,9 @@ function ActiveProgramCard({
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-xs uppercase tracking-wide text-neutral-500">{label}</dt>
+      <dt className="text-xs uppercase tracking-wide text-neutral-500">
+        {label}
+      </dt>
       <dd className="text-base font-medium">{value}</dd>
     </div>
   );
@@ -173,6 +190,7 @@ function formatHms(sec: number): string {
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
   const s = sec % 60;
-  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  if (h > 0)
+    return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   return `${m}:${String(s).padStart(2, "0")}`;
 }
