@@ -15,6 +15,11 @@ export default async function CoachPage() {
     orderBy: { createdAt: "desc" },
     include: { _count: { select: { plannedSessions: true } } },
   });
+  const draftProgram = await prisma.program.findFirst({
+    where: { userId, status: "draft" },
+    orderBy: { createdAt: "desc" },
+    include: { _count: { select: { plannedSessions: true } } },
+  });
 
   const foundryConfigured = Boolean(process.env.AZURE_FOUNDRY_PROJECT_ENDPOINT);
 
@@ -35,6 +40,8 @@ export default async function CoachPage() {
         </section>
       )}
 
+      {draftProgram && <DraftProgramNotice program={draftProgram} />}
+
       {activeProgram ? (
         <ActiveProgramCard
           program={activeProgram}
@@ -52,10 +59,9 @@ function NewProgramCard({ foundryConfigured }: { foundryConfigured: boolean }) {
     <section className="rounded border border-neutral-200 p-5">
       <h2 className="mb-1 text-lg font-medium">Build me a training plan</h2>
       <p className="mb-5 text-sm text-neutral-600">
-        Pick a race, optionally a finish-time target, and how long you want to
-        train. The AI coach will generate a periodized plan grounded in your
-        Strava history and physiological constraints (volume ramp &le;10%/wk,
-        80/20 polarized, recovery weeks every 4th, taper).
+        Pick a race, training window, weekly frequency, and pacing approach. The
+        AI coach will create a draft plan first so you can review it before it
+        drives your calendar.
       </p>
       <fieldset disabled={!foundryConfigured} className="space-y-4">
         <GoalForm />
@@ -76,6 +82,28 @@ type ActiveProgram = {
   createdAt: Date;
   _count: { plannedSessions: number };
 };
+
+function DraftProgramNotice({ program }: { program: ActiveProgram }) {
+  return (
+    <section className="mb-6 rounded border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="font-medium">You have an unreviewed draft plan.</div>
+          <p className="mt-1 text-amber-900">
+            {formatGoalLabel(program)} · {program.weeksTotal} weeks ·{" "}
+            {program._count.plannedSessions} sessions
+          </p>
+        </div>
+        <Link
+          href={{ pathname: "/coach/draft", query: { id: program.id } }}
+          className="underline"
+        >
+          Review draft
+        </Link>
+      </div>
+    </section>
+  );
+}
 
 function ActiveProgramCard({
   program,
@@ -151,13 +179,13 @@ function ActiveProgramCard({
       </div>
 
       <div className="rounded border border-neutral-200 p-5">
-        <h2 className="text-base font-medium">Replace this plan</h2>
+        <h2 className="text-base font-medium">Draft a replacement</h2>
         <p className="mt-1 mb-4 text-sm text-neutral-600">
-          Approve replacement before generating. The current plan is archived only after the new
-          plan is created successfully.
+          Create a new plan first. Your current plan stays active until you
+          review and accept the draft.
         </p>
         <fieldset disabled={!foundryConfigured} className="space-y-4">
-          <GoalForm requiresReplacementApproval />
+          <GoalForm />
         </fieldset>
       </div>
     </section>

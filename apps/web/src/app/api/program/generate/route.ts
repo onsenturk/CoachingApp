@@ -3,18 +3,18 @@
  *
  * 1. Auth + validate body against `GoalInputSchema`.
  * 2. Pull recent run history → `computeRunBaseline`.
- * 3. If a target time is provided AND we have a threshold-pace estimate:
- *    run `checkFeasibility`. On `red`, return 422 (do not bother the agent).
+ * 3. Derive target pacing from current prediction + selected program intensity.
  * 4. Build the agent input (athlete profile, baseline, goal, paces, zones,
  *    feasibility, hard constraints from policy.yaml).
  * 5. Pass through `govern()` (fail-closed: deny → 403, error → 500).
  * 6. Invoke the `plan-generator` Foundry agent.
- * 7. Validate JSON output with `PlanGeneratorOutputSchema` and the
- *    physiological `validatePlan` rules. Fail-closed on any violation.
- * 8. In a single transaction: mark prior `active` programs as `replaced`,
- *    create the new `Program`, bulk-insert `PlannedSession[]`.
+ * 7. Validate JSON output with `PlanGeneratorOutputSchema` and run the
+ *    physiological `validatePlan` rules. Rule violations are stored as draft
+ *    warnings so the user can review them before accepting.
+ * 8. In a single transaction: discard prior drafts, create the new draft
+ *    `Program`, and bulk-insert `PlannedSession[]`.
  *
- * Returns: `{ programId, weeksTotal, sessionsCount, feasibility }`.
+ * Returns: `{ draftProgramId, weeksTotal, sessionsCount, feasibility, warnings }`.
  */
 
 import { NextResponse } from "next/server";
@@ -56,6 +56,39 @@ const GENERATED_BY = `plan-generator@${MODEL}`;
 
 const RUN_SPORT_TYPES = ["Run", "TrailRun", "VirtualRun"] as const;
 
+const INTENSITY_TARGET_TIME_FACTOR: Record<schemas.ProgramIntensity, number> = {
+  easy: 1.05,
+  moderate: 1,
+  aggressive: 0.96,
+};
+
+const INTENSITY_PACE_STRATEGY: Record<schemas.ProgramIntensity, string> = {
+  easy: "Use conservative target paces roughly 5% slower than the current prediction and prioritize completion.",
+  moderate:
+    "Use target paces aligned with the current prediction and balance progression with recovery.",
+  aggressive:
+    "Use ambitious target paces roughly 4% faster than the current prediction while respecting all physiological guardrails.",
+};
+
+function defaultGoalDateIso(weeksTotal: number): string {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + weeksTotal * 7);
+  return date.toISOString().slice(0, 10);
+}
+
+function deriveTargetTimeSec(
+  predictedSec: number | undefined,
+  programIntensity: schemas.ProgramIntensity,
+): number | null {
+  if (!predictedSec || !Number.isFinite(predictedSec) || predictedSec <= 0) {
+    return null;
+  }
+  return Math.max(
+    60,
+    Math.round(predictedSec * INTENSITY_TARGET_TIME_FACTOR[programIntensity]),
+  );
+}
+
 export async function POST(req: Request) {
   const session = await auth();
   const userId = (session?.user as { id?: string } | undefined)?.id;
@@ -71,24 +104,14 @@ export async function POST(req: Request) {
     );
   }
   const goal = parsedGoal.data;
+  const goalDateIso = goal.goalDate ?? defaultGoalDateIso(goal.weeksTotal);
+  const goalDate = new Date(`${goalDateIso}T00:00:00.000Z`);
 
   // 2. Build baseline from last 90 days of run activities.
   const since = new Date();
   since.setUTCDate(since.getUTCDate() - 90);
-  const [user, activeProgram, activities] = await Promise.all([
+  const [user, activities] = await Promise.all([
     prisma.user.findUnique({ where: { id: userId } }),
-    prisma.program.findFirst({
-      where: { userId, status: "active" },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        goalType: true,
-        goalTargetSec: true,
-        goalDate: true,
-        weeksTotal: true,
-        createdAt: true,
-      },
-    }),
     prisma.activity.findMany({
       where: {
         userId,
@@ -99,17 +122,6 @@ export async function POST(req: Request) {
     }),
   ]);
   if (!user) return new NextResponse("User not found", { status: 404 });
-
-  if (activeProgram && !goal.replaceActiveProgram) {
-    return NextResponse.json(
-      {
-        error: "Replacing the active plan requires confirmation.",
-        requiresReplacementApproval: true,
-        activeProgram,
-      },
-      { status: 409 },
-    );
-  }
 
   const runBaseline = baselineFns.computeRunBaseline(
     activities.map((a) => ({
@@ -132,42 +144,35 @@ export async function POST(req: Request) {
       { thresholdPaceSecPerKm: runBaseline.thresholdPaceSecPerKm },
     )
     .find((prediction) => Math.abs(prediction.distanceM - goal.distanceM) < 50);
+  const derivedTargetTimeSec =
+    goal.targetTimeSec ??
+    deriveTargetTimeSec(
+      currentGoalPrediction?.predictedSec,
+      goal.programIntensity,
+    );
 
-  // 3. Goal-feasibility (only when target time + threshold-pace estimate exist).
+  // 3. Goal-feasibility and pacing strategy.
   let feasibility: rules.FeasibilityResult = {
     feasibility: "green",
     reason:
-      "No target time provided — plan will build distance capacity without a pace target.",
+      "No current race prediction available — plan will build distance capacity with conservative pacing.",
     requiredPaceSecPerKm: 0,
     requiredImprovementPct: 0,
   };
   const weeksUntilRace = Math.max(
     1,
-    Math.ceil(
-      (new Date(goal.goalDate).getTime() - Date.now()) / (7 * 24 * 3600_000),
-    ),
+    Math.ceil((goalDate.getTime() - Date.now()) / (7 * 24 * 3600_000)),
   );
-  if (goal.targetTimeSec && runBaseline.thresholdPaceSecPerKm) {
+  if (derivedTargetTimeSec && runBaseline.thresholdPaceSecPerKm) {
     feasibility = rules.checkFeasibility({
       goalType: goal.goalType,
       goalDistanceM: goal.distanceM,
-      goalTimeSec: goal.targetTimeSec,
+      goalTimeSec: derivedTargetTimeSec,
       weeksUntilRace,
       currentThresholdPaceSecPerKm: runBaseline.thresholdPaceSecPerKm,
       currentLongestM: runBaseline.longestRunM,
       currentWeeklyVolumeM: runBaseline.weeklyVolumeM,
     });
-    if (feasibility.feasibility === "red") {
-      return NextResponse.json(
-        {
-          feasibility: "red",
-          reason: feasibility.reason,
-          suggestedAlternativeTimeSec: feasibility.suggestedAlternativeTimeSec,
-          suggestedAlternativeWeeks: feasibility.suggestedAlternativeWeeks,
-        },
-        { status: 422 },
-      );
-    }
   } else if (!runBaseline.thresholdPaceSecPerKm) {
     feasibility = {
       feasibility: "amber",
@@ -179,10 +184,9 @@ export async function POST(req: Request) {
   }
 
   // 4. Build agent input payload.
-  const racePaces =
-    goal.targetTimeSec
-      ? targetPaces.targetsFromGoal(goal.distanceM, goal.targetTimeSec)
-      : null;
+  const racePaces = derivedTargetTimeSec
+    ? targetPaces.targetsFromGoal(goal.distanceM, derivedTargetTimeSec)
+    : null;
   const hrZones =
     user.maxHr && user.restingHr
       ? zones.hrZonesFromMaxAndRest(user.maxHr, user.restingHr)
@@ -202,10 +206,13 @@ export async function POST(req: Request) {
     goal: {
       goalType: goal.goalType,
       distanceM: goal.distanceM,
-      targetTimeSec: goal.targetTimeSec ?? null,
-      goalDate: goal.goalDate,
+      targetTimeSec: derivedTargetTimeSec,
+      userProvidedTargetTimeSec: goal.targetTimeSec ?? null,
+      goalDate: goalDateIso,
       weeksTotal: goal.weeksTotal,
       sessionsPerWk: goal.sessionsPerWk,
+      programIntensity: goal.programIntensity,
+      paceStrategy: INTENSITY_PACE_STRATEGY[goal.programIntensity],
       sport: goal.sport,
     },
     paces: racePaces,
@@ -243,7 +250,12 @@ export async function POST(req: Request) {
     {
       agent: "plan-generator",
       tool: "get_baseline",
-      args: { userId, goalType: goal.goalType, weeksTotal: goal.weeksTotal },
+      args: {
+        userId,
+        goalType: goal.goalType,
+        weeksTotal: goal.weeksTotal,
+        programIntensity: goal.programIntensity,
+      },
       userInput: JSON.stringify(goal),
     },
     { runCounter: counter, audit },
@@ -262,7 +274,12 @@ export async function POST(req: Request) {
   });
 
   type RunResult =
-    | { ok: true; plan: schemas.PlanGeneratorOutput; latencyMs: number; previousResponseId?: string }
+    | {
+        ok: true;
+        plan: schemas.PlanGeneratorOutput;
+        latencyMs: number;
+        previousResponseId?: string;
+      }
     | { ok: false; status: number; body: Record<string, unknown> };
 
   const runOnce = async (
@@ -286,7 +303,8 @@ export async function POST(req: Request) {
         agent: "plan-generator",
         tool: "invoke",
         decision: "error",
-        reason: err instanceof Error ? err.message.slice(0, 500) : "invoke failed",
+        reason:
+          err instanceof Error ? err.message.slice(0, 500) : "invoke failed",
         policyName: "foundry",
       });
       return {
@@ -335,7 +353,12 @@ export async function POST(req: Request) {
         },
       };
     }
-    return { ok: true, plan: parsedPlan.data, latencyMs, previousResponseId: responseId };
+    return {
+      ok: true,
+      plan: parsedPlan.data,
+      latencyMs,
+      previousResponseId: responseId,
+    };
   };
 
   // First attempt.
@@ -361,15 +384,16 @@ export async function POST(req: Request) {
       isHard: s.isHard,
     })),
     goalDistanceM: goal.distanceM,
-    goalTimeSec: goal.targetTimeSec ?? undefined,
+    goalTimeSec: derivedTargetTimeSec ?? undefined,
     currentPredictedGoalTimeSec: currentGoalPrediction?.predictedSec,
     baselineLongestM: runBaseline.longestRunM,
     baselineWeeklyVolumeM: runBaseline.weeklyVolumeM,
   });
 
-  let safetyRetryWarning:
-    | { message: string; violations: rules.RuleViolation[] }
-    | null = null;
+  let safetyRetryWarning: {
+    message: string;
+    violations: rules.RuleViolation[];
+  } | null = null;
 
   if (!validation.ok) {
     const firstAttemptViolations = validation.violations;
@@ -410,7 +434,7 @@ export async function POST(req: Request) {
         isHard: s.isHard,
       })),
       goalDistanceM: goal.distanceM,
-      goalTimeSec: goal.targetTimeSec ?? undefined,
+      goalTimeSec: derivedTargetTimeSec ?? undefined,
       currentPredictedGoalTimeSec: currentGoalPrediction?.predictedSec,
       baselineLongestM: runBaseline.longestRunM,
       baselineWeeklyVolumeM: runBaseline.weeklyVolumeM,
@@ -424,39 +448,43 @@ export async function POST(req: Request) {
     }
   }
 
-  if (!validation.ok) {
+  const ruleViolationWarning = !validation.ok
+    ? {
+        message:
+          "This draft violates physiological guardrails. Review the warnings before accepting it.",
+        violations: validation.violations,
+      }
+    : null;
+
+  if (ruleViolationWarning) {
     await audit({
       agent: "plan-generator",
       tool: "invoke",
-      decision: "error",
-      reason: "Plan violated physiological rules.",
+      decision: "allow",
+      reason: "Draft persisted with physiological rule warnings.",
       policyName: "rules",
       evidenceJson: { latencyMs, violations: validation.violations },
     });
-    return NextResponse.json(
-      { error: "Plan violated physiological rules.", violations: validation.violations },
-      { status: 502 },
-    );
   }
 
-  // 8. Persist atomically. Replace any prior active program.
+  // 8. Persist atomically. Replace only prior drafts; active plans stay active until acceptance.
   const created = await prisma.$transaction(async (tx) => {
     await tx.program.updateMany({
-      where: { userId, status: "active" },
-      data: { status: "replaced" },
+      where: { userId, status: "draft" },
+      data: { status: "discarded" },
     });
     const program = await tx.program.create({
       data: {
         userId,
         sport: goal.sport,
         goalType: goal.goalType,
-        goalTargetSec: goal.targetTimeSec ?? null,
-        goalDate: new Date(goal.goalDate),
+        goalTargetSec: derivedTargetTimeSec ?? null,
+        goalDate,
         weeksTotal: plan.weeksTotal,
         sessionsPerWk: plan.sessionsPerWk,
         feasibility: plan.feasibility,
         feasibilityReason: plan.feasibilityReason,
-        status: "active",
+        status: "draft",
         generatedBy: GENERATED_BY,
         baselineJson: {
           runBaseline: runBaseline as unknown as object,
@@ -469,8 +497,16 @@ export async function POST(req: Request) {
           },
         } as object,
         metaJson: {
+          programIntensity: goal.programIntensity,
+          userProvidedTargetTimeSec: goal.targetTimeSec ?? null,
+          derivedTargetTimeSec: derivedTargetTimeSec ?? null,
+          paceStrategy: INTENSITY_PACE_STRATEGY[goal.programIntensity],
           notes: plan.notes ?? null,
           suggestedAlternative: plan.suggestedAlternative ?? null,
+          ruleValidation: {
+            ok: validation.ok,
+            violations: validation.violations,
+          },
           safetyRetry: safetyRetryWarning
             ? {
                 applied: true,
@@ -494,7 +530,9 @@ export async function POST(req: Request) {
         durationMin: s.durationMin ?? null,
         distanceM: s.distanceM ?? null,
         description: s.description,
-        structureJson: s.structure ? (s.structure as Prisma.InputJsonValue) : Prisma.JsonNull,
+        structureJson: s.structure
+          ? (s.structure as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
         isHard: s.isHard,
         status: "planned",
       })),
@@ -502,12 +540,26 @@ export async function POST(req: Request) {
     return program;
   });
 
+  const warnings = [
+    ...(feasibility.feasibility === "red"
+      ? [
+          {
+            message: feasibility.reason,
+            feasibility: "red" as const,
+          },
+        ]
+      : []),
+    ...(safetyRetryWarning ? [safetyRetryWarning] : []),
+    ...(ruleViolationWarning ? [ruleViolationWarning] : []),
+  ];
+
   return NextResponse.json({
-    programId: created.id,
+    draftProgramId: created.id,
+    status: "draft",
     weeksTotal: plan.weeksTotal,
     sessionsCount: plan.sessions.length,
     feasibility: plan.feasibility,
     feasibilityReason: plan.feasibilityReason,
-    warnings: safetyRetryWarning ? [safetyRetryWarning] : [],
+    warnings,
   });
 }

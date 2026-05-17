@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>YouTube Thumbnail - Week 5 - Docker Failed To Run</title>
+<style>
+  :root {
+    --orange: #fc4c02;
+    --orange-2: #ff7a3a;
+    --bg-1: #071018;
+    --bg-2: #121827;
+    --ink: #ffffff;
+    --muted: rgba(255,255,255,0.74);
+    --red: #ef4444;
+    --red-2: #fb7185;
+    --green: #22c55e;
+    --green-2: #86efac;
+    --blue: #2496ed;
+    --cyan: #22d3ee;
+    --yellow: #facc15;
+    --panel: rgba(10,15,26,0.90);
+  }
+
+  html, body { margin: 0; padding: 0; background: #222; }
+  body {
+    display: grid;
+    place-items: center;
+    min-height: 100vh;
+    font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  }
+
+  .thumb {
+    position: relative;
+    width: 1280px;
+    height: 720px;
+    overflow: hidden;
+    color: var(--ink);
+    background:
+      radial-gradient(900px 620px at 84% 18%, rgba(36,150,237,0.36), transparent 62%),
+      radial-gradient(760px 520px at 6% 96%, rgba(252,76,2,0.30), transparent 58%),
+      radial-gradient(560px 360px at 48% 22%, rgba(34,197,94,0.19), transparent 60%),
+      linear-gradient(135deg, var(--bg-1), var(--bg-2));
+    box-shadow: 0 30px 80px rgba(0,0,0,0.5);
+  }
+
+  .thumb::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.045) 1px, transparent 1px);
+    background-size: 40px 40px;
+    mask-image: linear-gradient(180deg, rgba(0,0,0,0.76), rgba(0,0,0,0.13));
+  }
+
+  .scanline {
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(180deg, rgba(255,255,255,0.03) 0 1px, transparent 1px 7px);
+    mix-blend-mode: screen;
+    opacity: 0.20;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  .brands {
+    position: absolute;
+    top: 34px;
+    left: 48px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-weight: 850;
+    font-size: 20px;
+    color: rgba(255,255,255,0.92);
+    z-index: 6;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.16);
+    backdrop-filter: blur(8px);
+  }
+
+  .chip .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .chip.draft .dot { background: var(--green); box-shadow: 0 0 14px var(--green); }
+  .chip.docker .dot { background: var(--blue); box-shadow: 0 0 14px var(--blue); }
+  .chip.fail .dot { background: var(--red); box-shadow: 0 0 14px var(--red); }
+
+  .episode {
+    position: absolute;
+    top: 34px;
+    right: 48px;
+    z-index: 8;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.20);
+    padding: 8px 16px;
+    border-radius: 999px;
+    font-weight: 950;
+    font-size: 18px;
+    letter-spacing: 2px;
+  }
+  .episode b { color: var(--blue); }
+
+  .headline {
+    position: absolute;
+    left: 48px;
+    top: 108px;
+    width: 730px;
+    z-index: 5;
+  }
+
+  .flow-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: rgba(255,255,255,0.95);
+    background: rgba(34,197,94,0.16);
+    border: 1px solid rgba(34,197,94,0.56);
+    padding: 7px 13px;
+    border-radius: 999px;
+    font-size: 19px;
+    font-weight: 850;
+    letter-spacing: 0.2px;
+  }
+  .flow-pill .ok { color: var(--green-2); }
+  .flow-pill .arrow { color: var(--yellow); }
+  .flow-pill .bad { color: #fecaca; }
+
+  .kicker {
+    display: inline-block;
+    margin-top: 16px;
+    background: var(--blue);
+    color: #fff;
+    font-weight: 950;
+    font-size: 24px;
+    letter-spacing: 2px;
+    padding: 8px 14px;
+    border-radius: 6px;
+    text-transform: uppercase;
+    box-shadow: 0 8px 24px rgba(36,150,237,0.45);
+  }
+
+  h1 {
+    margin: 18px 0 0 0;
+    font-size: 96px;
+    line-height: 0.88;
+    font-weight: 950;
+    letter-spacing: -2.6px;
+    text-shadow: 0 8px 34px rgba(0,0,0,0.62);
+  }
+  h1 .accent { color: var(--red-2); }
+  h1 .blue { color: #93c5fd; }
+  h1 .underline {
+    padding: 0 6px;
+    background: linear-gradient(180deg, transparent 64%, rgba(239,68,68,0.66) 64%);
+  }
+
+  .sub {
+    margin-top: 22px;
+    max-width: 650px;
+    color: rgba(255,255,255,0.87);
+    font-size: 27px;
+    line-height: 1.22;
+    font-weight: 700;
+  }
+  .sub b { color: var(--yellow); }
+  .sub .green { color: var(--green-2); }
+
+  .stats {
+    position: absolute;
+    left: 48px;
+    bottom: 88px;
+    display: flex;
+    gap: 16px;
+    z-index: 5;
+  }
+  .stat {
+    min-width: 126px;
+    padding: 10px 15px;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.16);
+  }
+  .stat .n {
+    font-family: "JetBrains Mono", "Cascadia Mono", monospace;
+    font-size: 30px;
+    font-weight: 950;
+    line-height: 1;
+  }
+  .stat .l {
+    margin-top: 5px;
+    color: rgba(255,255,255,0.68);
+    font-size: 12px;
+    font-weight: 850;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+  }
+  .stat .blue { color: #93c5fd; }
+  .stat .green { color: var(--green-2); }
+  .stat .red { color: var(--red-2); }
+
+  .face-wrap {
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 520px;
+    height: 720px;
+    z-index: 2;
+    overflow: hidden;
+  }
+  .face-glow {
+    position: absolute;
+    inset: -70px -60px -70px 20px;
+    background: radial-gradient(closest-side, rgba(36,150,237,0.52), transparent 72%);
+    filter: blur(22px);
+    z-index: 1;
+    pointer-events: none;
+  }
+  .face {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 50% 35%;
+    -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 25%, #000 100%);
+            mask-image: linear-gradient(90deg, transparent 0%, #000 25%, #000 100%);
+  }
+  .face-rim {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 78px;
+    width: 4px;
+    background: linear-gradient(180deg, transparent, rgba(36,150,237,0.95), transparent);
+    filter: blur(6px);
+    z-index: 3;
+  }
+
+  .terminal-card {
+    position: absolute;
+    z-index: 7;
+    right: 48px;
+    bottom: 54px;
+    width: 496px;
+    background: var(--panel);
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 18px;
+    padding: 15px 17px 17px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 24px 48px rgba(0,0,0,0.58), 0 0 0 1px rgba(239,68,68,0.28);
+    transform: rotate(-2.4deg);
+  }
+  .terminal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    color: rgba(255,255,255,0.72);
+    font-size: 13px;
+    font-weight: 950;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+  }
+  .terminal-head .pill {
+    color: #fecaca;
+    background: rgba(239,68,68,0.20);
+    border: 1px solid rgba(239,68,68,0.58);
+    border-radius: 999px;
+    padding: 4px 10px;
+  }
+  .terminal {
+    font-family: "JetBrains Mono", "Cascadia Mono", "SF Mono", monospace;
+    background: rgba(0,0,0,0.36);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 12px;
+    padding: 14px 14px 12px;
+    font-size: 16px;
+    line-height: 1.47;
+  }
+  .terminal .ok { color: #86efac; }
+  .terminal .warn { color: #fde68a; }
+  .terminal .bad { color: #fca5a5; }
+  .terminal .blue { color: #93c5fd; }
+  .terminal .muted { color: rgba(255,255,255,0.56); }
+
+  .diagram {
+    position: absolute;
+    z-index: 4;
+    top: 292px;
+    left: 56px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .node {
+    min-width: 112px;
+    padding: 10px 13px;
+    border-radius: 14px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.16);
+    box-shadow: 0 12px 28px rgba(0,0,0,0.30);
+  }
+  .node .big {
+    font-weight: 950;
+    font-size: 20px;
+  }
+  .node .small {
+    margin-top: 2px;
+    color: rgba(255,255,255,0.62);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+  }
+  .node.good { border-color: rgba(34,197,94,0.56); }
+  .node.bad { border-color: rgba(239,68,68,0.62); }
+  .arrow {
+    color: rgba(255,255,255,0.68);
+    font-size: 30px;
+    font-weight: 950;
+  }
+
+  .docker-icon {
+    position: absolute;
+    z-index: 8;
+    top: 100px;
+    right: 238px;
+    width: 122px;
+    height: 86px;
+    transform: rotate(-7deg);
+    filter: drop-shadow(0 18px 26px rgba(0,0,0,0.42));
+  }
+  .docker-icon svg { width: 100%; height: 100%; overflow: visible; }
+
+  .tag {
+    position: absolute;
+    z-index: 9;
+    font-weight: 950;
+    border-radius: 10px;
+    box-shadow: 0 12px 28px rgba(0,0,0,0.46);
+    border: 1px solid rgba(255,255,255,0.16);
+  }
+  .tag.review {
+    top: 212px;
+    right: 312px;
+    background: var(--green);
+    color: #04230e;
+    padding: 10px 15px;
+    font-size: 20px;
+    transform: rotate(-4deg);
+    box-shadow: 0 12px 28px rgba(34,197,94,0.46);
+  }
+  .tag.failed {
+    top: 242px;
+    right: 48px;
+    background: var(--red);
+    color: #fff;
+    padding: 12px 18px;
+    font-size: 27px;
+    transform: rotate(5deg);
+    box-shadow: 0 12px 28px rgba(239,68,68,0.55);
+  }
+
+  .handle {
+    position: absolute;
+    left: 48px;
+    bottom: 34px;
+    z-index: 5;
+    color: rgba(255,255,255,0.76);
+    font-size: 20px;
+    font-weight: 750;
+    letter-spacing: 0.2px;
+  }
+  .handle span { color: var(--orange-2); }
+
+  .corner {
+    position: absolute;
+    right: -80px;
+    bottom: -80px;
+    width: 320px;
+    height: 320px;
+    background: var(--blue);
+    transform: rotate(45deg);
+    opacity: 0.16;
+    z-index: 1;
+  }
+</style>
+</head>
+<body>
+
+<div class="thumb" id="thumb">
+  <div class="corner"></div>
+  <div class="scanline"></div>
+
+  <div class="brands">
+    <div class="chip draft"><span class="dot"></span>Draft plans</div>
+    <div class="chip docker"><span class="dot"></span>Docker</div>
+    <div class="chip fail"><span class="dot"></span>Local stack failed</div>
+  </div>
+
+  <div class="episode">EP <b>05</b></div>
+
+  <div class="headline">
+    <div class="flow-pill">
+      <span class="ok">Generate draft</span>
+      <span class="arrow">-&gt;</span>
+      <span>Review</span>
+      <span class="arrow">-&gt;</span>
+      <span class="bad">Docker failed</span>
+    </div>
+    <div class="kicker">Week 5: real dev pain</div>
+    <h1>
+      <span class="blue">Docker</span><br/>
+      <span class="underline accent">Wouldn't Run</span>
+    </h1>
+    <div class="sub">
+      I built the <span class="green">draft-plan preview</span>, then the local stack said <b>nope</b>.
+    </div>
+  </div>
+
+  <div class="diagram">
+    <div class="node good"><div class="big">Draft</div><div class="small">Generated</div></div>
+    <div class="arrow">-&gt;</div>
+    <div class="node good"><div class="big">Warnings</div><div class="small">Visible</div></div>
+    <div class="arrow">-&gt;</div>
+    <div class="node bad"><div class="big">Docker</div><div class="small">Offline</div></div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="n green">W5</div><div class="l">Built this week</div></div>
+    <div class="stat"><div class="n blue">200</div><div class="l">Web responds</div></div>
+    <div class="stat"><div class="n red">6379</div><div class="l">Redis refused</div></div>
+  </div>
+
+  <div class="face-wrap">
+    <div class="face-glow"></div>
+    <img class="face" src="face.jpg?v=7" alt="" onerror="this.style.background='repeating-linear-gradient(45deg,#132033 0 14px,#1e2d46 14px 28px)';this.removeAttribute('src');" />
+    <div class="face-rim"></div>
+  </div>
+
+  <div class="docker-icon" aria-hidden="true">
+    <svg viewBox="0 0 180 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="38" y="50" width="88" height="34" rx="8" fill="#2496ED"/>
+      <rect x="46" y="34" width="18" height="14" rx="2" fill="#7dd3fc"/>
+      <rect x="68" y="34" width="18" height="14" rx="2" fill="#7dd3fc"/>
+      <rect x="90" y="34" width="18" height="14" rx="2" fill="#7dd3fc"/>
+      <rect x="68" y="16" width="18" height="14" rx="2" fill="#7dd3fc"/>
+      <path d="M30 66 C18 66 13 78 20 88 C28 102 54 103 90 102 C125 101 150 95 158 75 C146 80 134 79 122 72 C111 84 82 86 30 66Z" fill="#1D8CD8"/>
+      <circle cx="46" cy="78" r="4" fill="#061321"/>
+      <path d="M128 22 L155 49" stroke="#ef4444" stroke-width="10" stroke-linecap="round"/>
+      <path d="M155 22 L128 49" stroke="#ef4444" stroke-width="10" stroke-linecap="round"/>
+    </svg>
+  </div>
+
+  <div class="tag review">Preview flow shipped</div>
+  <div class="tag failed">Docker daemon missing</div>
+
+  <div class="terminal-card">
+    <div class="terminal-head">
+      <span>Local services</span>
+      <span class="pill">Failed</span>
+    </div>
+    <div class="terminal">
+      <div><span class="muted">$</span> docker compose up -d</div>
+      <div class="bad">failed to connect to Docker API</div>
+      <div class="warn">postgres:16-alpine not started</div>
+      <div class="bad">Redis ECONNREFUSED :6379</div>
+      <div class="ok">Next app: <span class="blue">http 200</span></div>
+    </div>
+  </div>
+
+  <div class="handle">@onsenturk - <span>github.com/onsenturk/CoachingApp</span></div>
+</div>
+
+</body>
+</html>

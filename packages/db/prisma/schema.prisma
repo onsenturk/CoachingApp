@@ -169,7 +169,7 @@ model Program {
   sessionsPerWk Int
   feasibility   String   // green | amber | red
   feasibilityReason String? @db.Text
-  status        String   @default("active") // active | completed | paused | replaced
+  status        String   @default("active") // draft | active | completed | paused | replaced | discarded
   generatedBy   String   // agent name + version
   baselineJson  Json     // captured baseline at gen time (CTL/ATL/zones/longest etc.)
   metaJson      Json?

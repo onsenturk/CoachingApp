@@ -72,8 +72,8 @@ export default async function CalendarPage({
     },
     orderBy: { startDateLocal: "asc" },
   });
-  const showSafetyRetryWarning =
-    warning === "safety-retry" || hasSafetyRetryWarning(activeProgram?.metaJson);
+  const programWarnings = getProgramWarnings(activeProgram?.metaJson);
+  const showSafetyRetryWarning = warning === "safety-retry";
 
   const byDay = new Map<
     string,
@@ -175,14 +175,22 @@ export default async function CalendarPage({
         <AppNavTabs />
       </header>
       {programHeader}
-      {showSafetyRetryWarning && (
+      {(showSafetyRetryWarning || programWarnings.length > 0) && (
         <section className="mb-5 rounded border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-          <div className="font-medium">Safety rules adjusted this plan.</div>
-          <p className="mt-1">
-            The first generated plan violated physiological guardrails, so the AI coach ran a
-            second pass and saved the rule-compliant version. Review the workouts before following
-            them.
-          </p>
+          <div className="font-medium">Safety review notice.</div>
+          {programWarnings.length > 0 ? (
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {programWarnings.slice(0, 6).map((message, index) => (
+                <li key={`${message}-${index}`}>{message}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-1">
+              The first generated plan violated physiological guardrails, so the
+              AI coach ran a second pass. Review the workouts before following
+              them.
+            </p>
+          )}
         </section>
       )}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -273,9 +281,62 @@ export default async function CalendarPage({
   );
 }
 
-function hasSafetyRetryWarning(metaJson: unknown): boolean {
-  if (!metaJson || typeof metaJson !== "object" || Array.isArray(metaJson)) return false;
+function getProgramWarnings(metaJson: unknown): string[] {
+  if (!metaJson || typeof metaJson !== "object" || Array.isArray(metaJson))
+    return [];
+  const warnings: string[] = [];
   const safetyRetry = (metaJson as { safetyRetry?: unknown }).safetyRetry;
-  if (!safetyRetry || typeof safetyRetry !== "object" || Array.isArray(safetyRetry)) return false;
-  return (safetyRetry as { applied?: unknown }).applied === true;
+  if (
+    safetyRetry &&
+    typeof safetyRetry === "object" &&
+    !Array.isArray(safetyRetry)
+  ) {
+    const typedSafetyRetry = safetyRetry as {
+      applied?: unknown;
+      message?: unknown;
+    };
+    if (typedSafetyRetry.applied === true) {
+      warnings.push(
+        typeof typedSafetyRetry.message === "string"
+          ? typedSafetyRetry.message
+          : "The first generated plan needed a safety retry before it was saved.",
+      );
+    }
+  }
+  const ruleValidation = (metaJson as { ruleValidation?: unknown })
+    .ruleValidation;
+  if (
+    ruleValidation &&
+    typeof ruleValidation === "object" &&
+    !Array.isArray(ruleValidation)
+  ) {
+    const typedRuleValidation = ruleValidation as {
+      ok?: unknown;
+      violations?: unknown;
+    };
+    if (
+      typedRuleValidation.ok === false &&
+      Array.isArray(typedRuleValidation.violations)
+    ) {
+      for (const violation of typedRuleValidation.violations) {
+        if (
+          !violation ||
+          typeof violation !== "object" ||
+          Array.isArray(violation)
+        )
+          continue;
+        const message = (violation as { message?: unknown; code?: unknown })
+          .message;
+        const code = (violation as { message?: unknown; code?: unknown }).code;
+        warnings.push(
+          typeof message === "string"
+            ? message
+            : typeof code === "string"
+              ? code
+              : "Plan has a physiological rule warning.",
+        );
+      }
+    }
+  }
+  return warnings;
 }
