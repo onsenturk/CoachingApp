@@ -16,6 +16,7 @@
     "./ctlAtl": "./src/ctlAtl.ts",
     "./zones": "./src/zones.ts",
     "./targetPaces": "./src/targetPaces.ts",
+    "./dailyRecommendation": "./src/dailyRecommendation.ts",
     "./wellness/adapter": "./src/wellness/adapter.ts",
     "./wellness/manual": "./src/wellness/manual.ts",
     "./wellness/heuristic": "./src/wellness/heuristic.ts"

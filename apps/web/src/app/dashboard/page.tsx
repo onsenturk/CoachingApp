@@ -14,8 +14,10 @@ import { baseline as baselineFns, racePrediction } from "@coaching/training";
 import { AppNavTabs } from "@/components/AppNavTabs";
 import { ActivityDetailCard } from "@/components/ActivityDetailCard";
 import { PlannedSessionCard } from "@/components/PlannedSessionCard";
+import { RecommendationCard } from "@/components/RecommendationCard";
 import { SessionCompletionActions } from "@/components/SessionCompletionActions";
 import { findBestActivityMatch } from "@/lib/activitySessionMatching";
+import type { RecommendationSport } from "@coaching/training/dailyRecommendation";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -35,7 +37,7 @@ export default async function DashboardPage() {
       prisma.program.findFirst({
         where: { userId, status: "active" },
         orderBy: { createdAt: "desc" },
-        select: { id: true },
+        select: { id: true, sport: true },
       }),
       prisma.activity.findMany({
         where: { userId },
@@ -111,6 +113,10 @@ export default async function DashboardPage() {
         },
       })
     : null;
+  const initialRecommendationSport = defaultRecommendationSport(
+    activeProgram?.sport,
+    last30,
+  );
 
   return (
     <main className="mx-auto max-w-3xl space-y-8 px-6 py-10">
@@ -151,6 +157,8 @@ export default async function DashboardPage() {
           <p className="text-neutral-500">No session planned for today.</p>
         )}
       </section>
+
+      <RecommendationCard initialSport={initialRecommendationSport} />
 
       <section className="rounded border border-neutral-200 p-4">
         <h2 className="mb-3 text-sm font-medium text-neutral-500">Fitness</h2>
@@ -425,4 +433,28 @@ function interpretTsb(tsb: number | null | undefined) {
   if (tsb >= -30)
     return { tone: "warn" as const, text: "Overload — monitor recovery" };
   return { tone: "bad" as const, text: "High injury / illness risk" };
+}
+
+function defaultRecommendationSport(
+  activeProgramSport: string | undefined,
+  activities: Array<{ sportType: string; distance: number }>,
+): RecommendationSport {
+  if (activeProgramSport === "bike") return "bike";
+  if (activeProgramSport === "run") return "run";
+
+  let runMeters = 0;
+  let bikeMeters = 0;
+  for (const activity of activities) {
+    const sport = activity.sportType.toLowerCase();
+    if (sport.includes("run")) runMeters += activity.distance;
+    if (
+      sport.includes("ride") ||
+      sport.includes("bike") ||
+      sport.includes("cycling")
+    ) {
+      bikeMeters += activity.distance;
+    }
+  }
+
+  return bikeMeters > runMeters * 1.5 ? "bike" : "run";
 }

@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>YouTube Thumbnail - Week 6 - AI Agent Picks Workout</title>
+<script>
+  (() => {
+    const param = new URLSearchParams(window.location.search).get("clawpilotTheme");
+    const theme =
+      param || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    document.documentElement.setAttribute("data-theme", theme);
+  })();
+</script>
+<style>
+  :root {
+    color-scheme: light;
+    --cp-bg: #f7f4ef;
+    --cp-bg-elevated: #fcfbf8;
+    --cp-surface: #ffffff;
+    --cp-surface-soft: #f5f5f5;
+    --cp-border: #dedede;
+    --cp-border-strong: #919191;
+    --cp-text: #242424;
+    --cp-text-muted: #5c5c5c;
+    --cp-text-soft: #6f6f6f;
+    --cp-accent: #b11f4b;
+    --cp-accent-hover: #9a1a41;
+    --cp-accent-soft: rgba(177, 31, 75, 0.08);
+    --cp-accent-fg: #ffffff;
+    --cp-success: #16a34a;
+    --cp-danger: #dc2626;
+    --cp-warning: #f59e0b;
+    --cp-link: #0078d4;
+    --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
+    --cp-overlay: rgba(255, 255, 255, 0.8);
+    --cp-panel: rgba(255, 255, 255, 0.86);
+    --cp-panel-strong: rgba(255, 255, 255, 0.96);
+    --cp-sheen: rgba(255, 255, 255, 0.55);
+    --cp-highlight: rgba(177, 31, 75, 0.12);
+  }
+  html[data-theme="dark"] {
+    color-scheme: dark;
+    --cp-bg: #3d3b3a;
+    --cp-bg-elevated: #343231;
+    --cp-surface: #292929;
+    --cp-surface-soft: #2e2e2e;
+    --cp-border: #474747;
+    --cp-border-strong: #5f5f5f;
+    --cp-text: #dedede;
+    --cp-text-muted: #919191;
+    --cp-text-soft: #b0b0b0;
+    --cp-accent: #fd8ea1;
+    --cp-accent-hover: #fb7b91;
+    --cp-accent-soft: rgba(253, 142, 161, 0.14);
+    --cp-accent-fg: #1a1a1a;
+    --cp-success: #4ade80;
+    --cp-danger: #f87171;
+    --cp-warning: #fbbf24;
+    --cp-link: #4da6ff;
+    --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+    --cp-overlay: rgba(41, 41, 41, 0.88);
+    --cp-panel: rgba(41, 41, 41, 0.72);
+    --cp-panel-strong: rgba(41, 41, 41, 0.96);
+    --cp-sheen: rgba(255, 255, 255, 0.04);
+    --cp-highlight: rgba(253, 142, 161, 0.12);
+  }
+
+  html, body { margin: 0; padding: 0; background: var(--cp-bg); }
+  body {
+    display: grid;
+    place-items: center;
+    min-height: 100vh;
+    font-family: "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif;
+    color: var(--cp-text);
+  }
+
+  .thumb {
+    position: relative;
+    width: 1280px;
+    height: 720px;
+    overflow: hidden;
+    color: var(--cp-text);
+    background:
+      radial-gradient(circle at 82% 16%, var(--cp-accent-soft), transparent 36%),
+      radial-gradient(circle at 8% 92%, var(--cp-highlight), transparent 34%),
+      linear-gradient(135deg, var(--cp-bg-elevated), var(--cp-bg));
+    box-shadow: var(--cp-shadow);
+  }
+
+  .thumb::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--cp-sheen) 1px, transparent 1px),
+      linear-gradient(90deg, var(--cp-sheen) 1px, transparent 1px);
+    background-size: 40px 40px;
+    opacity: 0.12;
+    mask-image: linear-gradient(180deg, var(--cp-bg), transparent);
+  }
+
+  .scanline {
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(180deg, var(--cp-sheen) 0 1px, transparent 1px 7px);
+    opacity: 0.18;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  .brands {
+    position: absolute;
+    top: 34px;
+    left: 48px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-weight: 850;
+    font-size: 20px;
+    color: var(--cp-text);
+    z-index: 6;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: var(--cp-panel);
+    border: 1px solid var(--cp-border);
+    backdrop-filter: blur(8px);
+  }
+
+  .chip .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--cp-accent); }
+  .chip.ok .dot { background: var(--cp-success); }
+  .chip.warn .dot { background: var(--cp-warning); }
+  .chip.link .dot { background: var(--cp-link); }
+
+  .episode {
+    position: absolute;
+    top: 34px;
+    right: 48px;
+    z-index: 8;
+    background: var(--cp-panel);
+    border: 1px solid var(--cp-border);
+    padding: 8px 16px;
+    border-radius: 999px;
+    font-weight: 950;
+    font-size: 18px;
+    letter-spacing: 2px;
+  }
+  .episode b { color: var(--cp-accent); }
+
+  .headline {
+    position: absolute;
+    left: 48px;
+    top: 106px;
+    width: 725px;
+    z-index: 5;
+  }
+
+  .flow-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--cp-text);
+    background: var(--cp-accent-soft);
+    border: 1px solid var(--cp-accent);
+    padding: 7px 13px;
+    border-radius: 999px;
+    font-size: 19px;
+    font-weight: 850;
+    letter-spacing: 0.2px;
+  }
+  .flow-pill .ok { color: var(--cp-success); }
+  .flow-pill .flow-arrow { color: var(--cp-warning); }
+  .flow-pill .ai { color: var(--cp-accent); }
+
+  .kicker {
+    display: inline-block;
+    margin-top: 16px;
+    background: var(--cp-accent);
+    color: var(--cp-accent-fg);
+    font-weight: 950;
+    font-size: 24px;
+    letter-spacing: 2px;
+    padding: 8px 14px;
+    border-radius: 0.625rem;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    margin: 18px 0 0 0;
+    font-size: 92px;
+    line-height: 0.9;
+    font-weight: 950;
+    letter-spacing: 0;
+    text-shadow: 0 10px 28px var(--cp-overlay);
+  }
+  h1 .accent { color: var(--cp-accent); }
+  h1 .underline {
+    padding: 0 6px;
+    background: linear-gradient(180deg, transparent 64%, var(--cp-highlight) 64%);
+  }
+
+  .sub {
+    margin-top: 22px;
+    max-width: 610px;
+    color: var(--cp-text-muted);
+    font-size: 26px;
+    line-height: 1.22;
+    font-weight: 700;
+  }
+  .sub b { color: var(--cp-warning); }
+  .sub .agent { color: var(--cp-accent); }
+
+  .stats {
+    position: absolute;
+    left: 48px;
+    bottom: 86px;
+    display: flex;
+    gap: 16px;
+    z-index: 5;
+  }
+  .stat {
+    min-width: 126px;
+    padding: 10px 15px;
+    border-radius: 0.625rem;
+    background: var(--cp-panel);
+    border: 1px solid var(--cp-border);
+  }
+  .stat .n {
+    font-family: Consolas, "Courier New", Courier, monospace;
+    font-size: 30px;
+    font-weight: 950;
+    line-height: 1;
+  }
+  .stat .l {
+    margin-top: 5px;
+    color: var(--cp-text-muted);
+    font-size: 12px;
+    font-weight: 850;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+  }
+  .stat .accent { color: var(--cp-accent); }
+  .stat .green { color: var(--cp-success); }
+  .stat .warn { color: var(--cp-warning); }
+
+  .face-wrap {
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 520px;
+    height: 720px;
+    z-index: 2;
+    overflow: hidden;
+  }
+  .face-glow {
+    position: absolute;
+    inset: -70px -60px -70px 20px;
+    background: radial-gradient(closest-side, var(--cp-accent-soft), transparent 72%);
+    filter: blur(22px);
+    z-index: 1;
+    pointer-events: none;
+  }
+  .face {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 50% 35%;
+    -webkit-mask-image: linear-gradient(90deg, transparent 0%, var(--cp-bg) 25%, var(--cp-bg) 100%);
+            mask-image: linear-gradient(90deg, transparent 0%, var(--cp-bg) 25%, var(--cp-bg) 100%);
+  }
+  .face-rim {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 78px;
+    width: 4px;
+    background: linear-gradient(180deg, transparent, var(--cp-accent), transparent);
+    filter: blur(6px);
+    z-index: 3;
+  }
+
+  .agent-card {
+    position: absolute;
+    z-index: 8;
+    right: 46px;
+    bottom: 54px;
+    width: 500px;
+    background: var(--cp-panel-strong);
+    border: 1px solid var(--cp-border);
+    border-radius: 16px;
+    padding: 16px 18px 18px;
+    box-shadow: 0 0 2px var(--cp-overlay), 0 1px 2px var(--cp-overlay);
+    transform: rotate(-2.2deg);
+  }
+  .agent-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: Consolas, "Courier New", Courier, monospace;
+    font-size: 15px;
+    font-weight: 900;
+    color: var(--cp-text-muted);
+    margin-bottom: 12px;
+  }
+  .agent-top .live { color: var(--cp-success); }
+  .recommendation {
+    border-radius: 0.625rem;
+    border: 1px solid var(--cp-border);
+    background: var(--cp-surface);
+    padding: 14px;
+  }
+  .rec-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-weight: 950;
+    font-size: 20px;
+  }
+  .rec-title span {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    background: var(--cp-accent-soft);
+    color: var(--cp-accent);
+    padding: 5px 10px;
+    font-size: 12px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .rec-main {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+  }
+  .rec-box {
+    border-radius: 0.625rem;
+    border: 1px solid var(--cp-border);
+    background: var(--cp-surface-soft);
+    padding: 10px;
+    min-height: 56px;
+  }
+  .rec-box .label {
+    color: var(--cp-text-soft);
+    font-size: 11px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .rec-box .value {
+    margin-top: 4px;
+    font-weight: 950;
+    font-size: 22px;
+  }
+  .json-line {
+    margin-top: 12px;
+    font-family: Consolas, "Courier New", Courier, monospace;
+    color: var(--cp-text-muted);
+    font-size: 16px;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+  .json-line b { color: var(--cp-accent); }
+  .json-line .ok { color: var(--cp-success); }
+
+  .arrow-stack {
+    position: absolute;
+    right: 380px;
+    top: 214px;
+    z-index: 7;
+    transform: rotate(8deg);
+  }
+  .big-arrow {
+    width: 210px;
+    height: 72px;
+    border-radius: 999px;
+    background: var(--cp-accent);
+    color: var(--cp-accent-fg);
+    display: grid;
+    place-items: center;
+    font-size: 44px;
+    font-weight: 950;
+    box-shadow: var(--cp-shadow);
+  }
+</style>
+</head>
+<body>
+  <main class="thumb" aria-label="Week 6 YouTube thumbnail">
+    <div class="scanline"></div>
+
+    <div class="brands">
+      <div class="chip ok"><span class="dot"></span>CoachingApp</div>
+      <div class="chip link"><span class="dot"></span>Foundry Agent</div>
+      <div class="chip warn"><span class="dot"></span>7D Efforts</div>
+    </div>
+
+    <div class="episode">WEEK <b>06</b></div>
+
+    <section class="headline">
+      <div class="flow-pill"><span class="ok">Strava</span><span class="flow-arrow">→</span><span class="ai">AI Agent</span><span class="flow-arrow">→</span>Workout</div>
+      <div class="kicker">Agent-backed</div>
+      <h1>AI PICKS<br><span class="underline">MY</span> <span class="accent">WORKOUT</span></h1>
+      <div class="sub">Daily recommendation from <span class="agent">Foundry</span>, based on the <b>past 7 days</b> of running or biking.</div>
+    </section>
+
+    <section class="stats">
+      <div class="stat"><div class="n accent">7D</div><div class="l">effort window</div></div>
+      <div class="stat"><div class="n green">AI</div><div class="l">recommendation</div></div>
+      <div class="stat"><div class="n warn">ZOD</div><div class="l">validated</div></div>
+    </section>
+
+    <div class="face-wrap">
+      <div class="face-glow"></div>
+      <img class="face" src="face.jpg" alt="Developer portrait" />
+      <div class="face-rim"></div>
+    </div>
+
+    <div class="arrow-stack"><div class="big-arrow">→</div></div>
+
+    <aside class="agent-card">
+      <div class="agent-top"><span>daily-recommendation.agent</span><span class="live">LIVE</span></div>
+      <div class="recommendation">
+        <div class="rec-title">Today's pick <span>run | bike</span></div>
+        <div class="rec-main">
+          <div class="rec-box"><div class="label">Duration</div><div class="value">20-40</div></div>
+          <div class="rec-box"><div class="label">Effort</div><div class="value">Easy</div></div>
+          <div class="rec-box"><div class="label">Sport</div><div class="value">Run</div></div>
+        </div>
+        <div class="json-line">{ <b>source</b>: "agent", <span class="ok">valid</span>: true }</div>
+      </div>
+    </aside>
+  </main>
+</body>
+</html>

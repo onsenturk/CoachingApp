@@ -8,7 +8,5 @@ export * as ctlAtl from "./ctlAtl";
 export * as zones from "./zones";
 export * as targetPaces from "./targetPaces";
 export * as racePrediction from "./racePrediction";
-export type {
-  WellnessAdapter,
-  WellnessReading,
-} from "./wellness/adapter";
+export * as dailyRecommendation from "./dailyRecommendation";
+export type { WellnessAdapter, WellnessReading } from "./wellness/adapter";

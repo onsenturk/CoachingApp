@@ -48,6 +48,15 @@ agents:
       - get_recent_compliance
     max_calls_per_run: 8
 
+  daily-recommendation:
+    description: Recommend today's run or bike workout from the past 7 days of efforts.
+    allowed_tools:
+      - get_recent_efforts
+      - get_readiness_state
+      - get_load_state
+      - get_planned_session
+    max_calls_per_run: 8
+
   coach-chat:
     description: Conversational coach grounded in user data.
     allowed_tools:

@@ -24,7 +24,7 @@ The application does not put a human coach in the loop. AI-generated plans and s
 | Worker                   | BullMQ               | BullMQ 5.76.6, ioredis 5.10.1                              | Processes Strava sync, training-load recalculation, and activity summaries.            |
 | AI platform              | Azure AI Foundry     | Configured by environment and `agents/foundry-agents.json` | Hosts plan-generation, adjustment, and summary agents.                                 |
 | AI client and governance | `@coaching/ai`       | Azure Identity 4.13.1, Zod 3.25.76, YAML 2.8.4             | Foundry REST calls, policy loading, schema validation, tool governance, audit writing. |
-| Training science         | `@coaching/training` | TypeScript package                                         | TRIMP, TSS, CTL/ATL/TSB, readiness, zones, target paces, race predictions, plan rules. |
+| Training science         | `@coaching/training` | TypeScript package                                         | TRIMP, TSS, CTL/ATL/TSB, readiness, zones, target paces, race predictions, plan rules, 7-day effort summaries. |
 | Strava integration       | `@coaching/strava`   | TypeScript package                                         | Typed Strava client and rate limiting.                                                 |
 | Secret protection        | libsodium            | libsodium-wrappers 0.7.15                                  | Encrypts Strava OAuth tokens at rest.                                                  |
 | Test runner              | Vitest               | Vitest 4.1.5                                               | Unit tests for governance and training-science rules.                                  |
@@ -38,7 +38,7 @@ The application does not put a human coach in the loop. AI-generated plans and s
 | Worker process         | `apps/worker`                | Starts BullMQ workers for `strava-sync`, `training-load`, and `activity-summary`.                                        |
 | Database package       | `packages/db`                | Prisma schema and database client export.                                                                                |
 | AI package             | `packages/ai`                | Foundry client, agent governance, schemas, and AI policy.                                                                |
-| Training package       | `packages/training`          | Deterministic training calculations and plan validation.                                                                 |
+| Training package       | `packages/training`          | Deterministic training calculations, plan validation, and 7-day effort context for the daily recommendation agent.       |
 | Strava package         | `packages/strava`            | External Strava API access and rate-limit management.                                                                    |
 | Foundry agent manifest | `agents/foundry-agents.json` | Local source of truth for hosted Foundry agent definitions.                                                              |
 | Local infrastructure   | `docker-compose.yml`         | Local PostgreSQL and Redis services.                                                                                     |
@@ -68,6 +68,7 @@ The application does not put a human coach in the loop. AI-generated plans and s
 | FR-019 | Workout pace displays include both min/km and km/h for treadmill use.                                                                                                                  | `apps/web/src/components/PlannedSessionCard.tsx`; `GoalForm` pace preview                                                                             | Should               |
 | FR-020 | Foundry agents can be synced from a local manifest.                                                                                                                                    | `agents/foundry-agents.json`; `scripts/sync-foundry-agents.ps1`; root `agents:sync` script                                                            | Must for AI features |
 | FR-021 | AI calls are audited without storing user prompt content.                                                                                                                              | `AIRunLog` model; `audit` writer in plan generation route; governance instructions                                                                    | Must                 |
+| FR-022 | Users can request an AI-generated daily run or bike recommendation using duration and effort selectors, grounded in the past 7 days of run/bike efforts with safety validation.       | `agents/foundry-agents.json`; `packages/ai/src/schemas/recommendation.ts`; `apps/web/src/app/api/recommendation/today/route.ts`; `apps/web/src/components/RecommendationCard.tsx` | Should               |
 
 ## Non-Functional Requirements
 
@@ -120,4 +121,7 @@ npx pnpm@11.0.9 -r test
 - [packages/db/prisma/schema.prisma](../packages/db/prisma/schema.prisma)
 - [docker-compose.yml](../docker-compose.yml)
 - [apps/web/src/app/api/program/generate/route.ts](../apps/web/src/app/api/program/generate/route.ts)
+- [apps/web/src/app/api/recommendation/today/route.ts](../apps/web/src/app/api/recommendation/today/route.ts)
+- [packages/ai/src/schemas/recommendation.ts](../packages/ai/src/schemas/recommendation.ts)
+- [packages/training/src/dailyRecommendation.ts](../packages/training/src/dailyRecommendation.ts)
 - [apps/worker/src/index.ts](../apps/worker/src/index.ts)
