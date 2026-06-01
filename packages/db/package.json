@@ -20,7 +20,7 @@
   },
   "devDependencies": {
     "@types/node": "22.19.18",
-    "prisma": "5.22.0",
+    "prisma": "7.8.0",
     "typescript": "5.9.3"
   }
 }
