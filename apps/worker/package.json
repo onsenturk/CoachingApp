@@ -14,13 +14,13 @@
     "@coaching/db": "workspace:*",
     "@coaching/strava": "workspace:*",
     "@coaching/training": "workspace:*",
-    "bullmq": "5.76.6",
-    "ioredis": "5.10.1",
-    "libsodium-wrappers": "0.7.15"
+    "bullmq": "5.78.1",
+    "ioredis": "5.11.1",
+    "libsodium-wrappers": "0.8.4"
   },
   "devDependencies": {
-    "@types/libsodium-wrappers": "0.7.14",
-    "tsx": "4.21.0",
+    "@types/libsodium-wrappers": "0.8.2",
+    "tsx": "4.22.4",
     "typescript": "5.9.3"
   }
 }
